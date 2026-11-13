@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>23မောင်း Admin</title>
+<link rel="icon" type="image/png" href="logo.png">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Myanmar Text", "Pyidaungsu", sans-serif; background: #eef2f7; color: #1e293b; padding-bottom: 64px; font-size: 14px; }
+  .topbar { background: linear-gradient(135deg, #1e3a5f, #12294a); color: #fff; padding: 11px 14px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 10; border-bottom: 3px solid #d4af37; box-shadow: 0 2px 10px rgba(0,0,0,.18); }
+  .topbar h1 { font-size: 16px; white-space: nowrap; }
+  .topbar .ver { font-size: 11px; color: #fde047; white-space: nowrap; }
+  .screen { display: none; padding: 10px 10px 8px; }
+  .screen.active { display: block; }
+  .card { background: #fff; border-radius: 14px; padding: 12px; margin-bottom: 10px; box-shadow: 0 2px 10px rgba(30,58,95,.08); border: 1px solid #e8eef5; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .muted { color: #64748b; font-size: 12px; }
+  h3 { font-size: 15px; margin-bottom: 6px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+  .stat { background: #fff; border-radius: 14px; padding: 12px 8px; text-align: center; box-shadow: 0 2px 10px rgba(30,58,95,.08); border: 1px solid #e8eef5; }
+  .stat b { display: block; font-size: 22px; color: #1e3a5f; }
+  .stat span { font-size: 11px; color: #64748b; white-space: nowrap; display: block; overflow: hidden; text-overflow: ellipsis; }
+  .stat.warn b { color: #d92b2b; }
+  .btn-green { background: linear-gradient(135deg, #166534, #14532d); color: #fff; border: none; border-radius: 10px; padding: 9px 12px; font-size: 14px; font-weight: bold; font-family: inherit; cursor: pointer; box-shadow: 0 2px 6px rgba(20,83,45,.25); }
+  .btn-red { background: linear-gradient(135deg, #dc2626, #b91c1c); color: #fff; border: none; border-radius: 10px; padding: 9px 12px; font-size: 14px; font-weight: bold; font-family: inherit; cursor: pointer; box-shadow: 0 2px 6px rgba(185,28,28,.25); }
+  .btn-ghost { background: #e8eef5; color: #1e293b; border: none; border-radius: 10px; padding: 9px 12px; font-size: 14px; font-weight: bold; font-family: inherit; cursor: pointer; }
+  .btn-navy { background: linear-gradient(135deg, #1e3a5f, #2a4a73); color: #fff; border: none; border-radius: 12px; padding: 12px; width: 100%; font-size: 15px; font-weight: bold; font-family: inherit; cursor: pointer; box-shadow: 0 3px 10px rgba(30,58,95,.28); }
+  .tabs { display: flex; gap: 4px; background: #e2e8f0; border-radius: 999px; padding: 3px; margin-bottom: 12px; }
+  .tabs button { flex: 1; background: none; border: none; padding: 8px 2px; font-size: 13px; font-weight: bold; font-family: inherit; color: #64748b; cursor: pointer; border-radius: 999px; white-space: nowrap; overflow: hidden; }
+  .tabs button.on { color: #fff; background: #1e3a5f; box-shadow: 0 2px 6px rgba(30,58,95,.25); }
+  .req { border: 1px solid #e8eef5; border-radius: 12px; padding: 11px; margin-bottom: 9px; box-shadow: 0 1px 5px rgba(30,58,95,.05); }
+  .req .rhead { display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; margin-bottom: 2px; }
+  .req .ramt { font-size: 18px; font-weight: bold; color: #1e3a5f; }
+  .req .rmeta { font-size: 12px; color: #64748b; margin-bottom: 6px; line-height: 1.5; }
+  .req .rshot { background: #f1f5f9; border: 1px dashed #94a3b8; border-radius: 8px; padding: 12px; text-align: center; color: #64748b; font-size: 12px; margin-bottom: 8px; }
+  .req .ractions { display: flex; gap: 8px; }
+  .req .ractions button { flex: 1; }
+  .req.done { opacity: .55; }
+  .badge { display: inline-block; font-size: 11px; font-weight: bold; padding: 2px 8px; border-radius: 999px; }
+  .badge.pend { background: #fef9c3; color: #854d0e; }
+  .badge.ok { background: #dcfce7; color: #166534; }
+  .badge.no { background: #fee2e2; color: #991b1b; }
+  .bet-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 2px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+  .bet-row:last-child { border-bottom: none; }
+  .bet-row .who { font-weight: bold; }
+  .bet-row .what { color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .bet-row .amt { font-weight: bold; color: #1e3a5f; white-space: nowrap; flex-shrink: 0; }
+  input[type=text], input[type=number], select { width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px; font-size: 15px; font-family: inherit; margin-bottom: 8px; outline: none; background: #fbfdff; }
+  input[type=text]:focus, input[type=number]:focus, select:focus { border-color: #1e3a5f; box-shadow: 0 0 0 3px rgba(30,58,95,.12); background: #fff; }
+  .set-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 2px; border-bottom: 1px solid #f1f5f9; font-size: 14px; gap: 8px; }
+  .set-row > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .set-row:last-child { border-bottom: none; }
+  .set-row input { width: 90px; margin: 0; text-align: center; padding: 8px; }
+  .toggle { width: 52px; height: 28px; border-radius: 999px; background: #cbd5e1; border: none; cursor: pointer; position: relative; flex-shrink: 0; }
+  .toggle.on { background: #16a34a; }
+  .toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: left .15s; }
+  .toggle.on::after { left: 27px; }
+  .res-in { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+  .res-in span { font-weight: bold; white-space: nowrap; font-size: 14px; }
+  .res-in input { margin: 0; text-align: center; }
+  nav { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #e8eef5; display: flex; height: 56px; z-index: 10; box-shadow: 0 -2px 12px rgba(30,58,95,.07); padding: 4px 6px; }
+  nav button { flex: 1; background: none; border: none; font-size: 10px; font-weight: bold; font-family: inherit; color: #64748b; cursor: pointer; border-radius: 10px; white-space: nowrap; overflow: hidden; padding: 0 1px; }
+  nav button.on { color: #1e3a5f; background: #e8eef5; }
+  #toast { position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); background: #1e293b; color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 14px; display: none; z-index: 50; white-space: nowrap; max-width: 94vw; overflow: hidden; text-overflow: ellipsis; }
+  .sect { font-size: 14px; font-weight: bold; color: #1e3a5f; margin: 14px 2px 7px; border-left: 3px solid #d4af37; padding-left: 8px; }
+  .user-card { border: 1px solid #e8eef5; border-radius: 12px; margin-bottom: 10px; overflow: hidden; box-shadow: 0 1px 5px rgba(30,58,95,.05); }
+  .user-head { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; background: #f8fafc; cursor: pointer; font-weight: bold; font-size: 14px; }
+  .user-head .tot { color: #1e3a5f; }
+  .user-body { display: none; padding: 6px 12px 10px; border-top: 1px solid #e2e8f0; }
+  .user-card.open .user-body { display: block; }
+  .user-card.open .user-head .arr { transform: rotate(90deg); display: inline-block; }
+  .user-body .glabel { font-size: 12px; font-weight: bold; color: #0e7490; margin: 8px 0 2px; }
+  .led-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
+  .led-cell { background: #f1f5f9; border-radius: 8px; padding: 5px 2px; text-align: center; font-size: 11px; }
+  .led-cell b { display: block; font-size: 12px; color: #1e3a5f; }
+  .led-cell.hot { background: #ede9fe; }
+  .led-cell.hot b { color: #6b21a8; }
+  .mrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 2px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+  .mrow:last-child { border-bottom: none; }
+  .mrow .mt { font-weight: bold; }
+  .mrow .mc { color: #64748b; font-size: 12px; }
+  .mrow.closed { opacity: .55; }
+  .led-cell.over { background: #fee2e2; }
+  .led-cell.over b { color: #b91c1c; }
+  .bet-row.over .amt, .bet-row.over .what { color: #b91c1c; font-weight: bold; }
+  .lim-row { display: flex; align-items: center; gap: 6px; padding: 8px 0 2px; font-size: 13px; font-weight: bold; }
+  .lim-row input { width: 110px; margin: 0; padding: 8px; text-align: center; }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { background: #1e293b; color: #fff; border-radius: 999px; padding: 5px 6px 5px 10px; font-size: 13px; font-weight: bold; display: inline-flex; align-items: center; gap: 4px; }
+  .chip button { background: none; border: none; color: #fca5a5; font-size: 15px; font-weight: bold; cursor: pointer; padding: 0 2px; font-family: inherit; }
+  .led-cell.blocked { background: #fee2e2; }
+  .led-cell.blocked b { color: #b91c1c; }
+  .bet-row.blocked .what, .bet-row.blocked .amt { color: #b91c1c; font-weight: bold; }
+  .mini-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+  .mini-tabs button { flex: 1; border: 1px solid #cbd5e1; background: #fff; border-radius: 10px; padding: 8px; font-size: 14px; font-weight: bold; font-family: inherit; color: #64748b; cursor: pointer; white-space: nowrap; }
+  .mini-tabs button.on { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
+  .net-match { border: 1px solid #e8eef5; border-radius: 12px; padding: 10px 12px; margin-bottom: 9px; background: #fff; box-shadow: 0 1px 5px rgba(30,58,95,.05); }
+  .net-match .nm-head { font-weight: bold; font-size: 14px; margin-bottom: 4px; }
+  .net-row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; color: #475569; white-space: nowrap; gap: 8px; }
+  .net-row b { color: #1e293b; }
+  .net-res { font-weight: bold; color: #b91c1c; font-size: 14px; padding-top: 4px; border-top: 1px dashed #e2e8f0; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .home-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+  .home-box { background: #1e3a5f; color: #fff; border: none; border-radius: 10px; padding: 12px 4px; font-size: 14px; font-weight: bold; font-family: inherit; cursor: pointer; text-align: center; white-space: nowrap; overflow: hidden; }
+  .home-box span { display: block; font-size: 11px; font-weight: normal; color: #bfdbfe; margin-top: 2px; }
+  .bs-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 2px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+  .bs-row:last-child { border-bottom: none; }
+  .bs-row .rank { color: #64748b; width: 26px; }
+  .bs-row .num { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .bs-row .amt { font-weight: bold; color: #1e3a5f; white-space: nowrap; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<div id="loginGate" style="display:none;position:fixed;inset:0;background:#eef2f7;z-index:100;padding:24px 14px;overflow:auto">
+  <div class="card" style="max-width:380px;margin:60px auto;text-align:center">
+    <img src="logo.png" alt="23မောင်း" style="height:64px;border-radius:12px;margin-bottom:8px">
+    <h3>23မောင်း Admin</h3>
+    <p class="muted" style="margin-bottom:10px">Admin အကောင့်နဲ့ ဝင်ပါ (PocketBase superuser)</p>
+    <input type="text" id="loginEmail" placeholder="Admin email" autocomplete="username">
+    <input type="password" id="loginPass" placeholder="Password" autocomplete="current-password">
+    <button class="btn-navy" onclick="loginAdmin()">ဝင်မယ်</button>
+    <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
+  </div>
+</div>
+<div class="topbar"><h1><img src="logo.png" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v1.0</span></div>
+
+<!-- home -->
+<div class="screen active" id="scr-home">
+  <div class="stats">
+    <div class="stat warn"><b id="stPend">3</b><span>အတည်ပြုရန် ကျန်</span></div>
+    <div class="stat"><b id="stBets">12</b><span>ဒီနေ့ လောင်းကစား</span></div>
+    <div class="stat"><b id="stPlayers">48</b><span>ကစားသမား စုစုပေါင်း</span></div>
+    <div class="stat"><b id="stStake">1,240,000</b><span>ဒီနေ့ ထိုးငွေ (ကျပ်)</span></div>
+  </div>
+  <div class="home-grid">
+    <button class="home-box" onclick="go('scr-req')">တောင်းဆို<span id="hbReq">3 ခု ကျန်</span></button>
+    <button class="home-box" onclick="go('scr-ledger')">လယ်ဂျာ<span id="hbLedger">52,000 ကျပ်</span></button>
+    <button class="home-box" onclick="go('scr-bigsmall')">ကြီးငယ်<span>အကြီးဆုံး စဉ်</span></button>
+    <button class="home-box" onclick="go('scr-res')">ရလဒ်<span id="hbRes">9 ပွဲ</span></button>
+    <button class="home-box" onclick="go('scr-bets')">လောင်းကစား<span id="hbBets">12 ကွက်</span></button>
+    <button class="home-box" onclick="go('scr-summary')">စာရင်းချုပ်<span>စုစုပေါင်း</span></button>
+  </div>
+  <div class="card">
+    <h3>စောင့်နေတာ</h3>
+    <div class="bet-row"><span>ငွေသွင်း တောင်းဆိုမှု</span><b style="color:#d92b2b" id="wIn">2 ခု</b></div>
+    <div class="bet-row"><span>ငွေထုတ် တောင်းဆိုမှု</span><b style="color:#d92b2b" id="wOut">1 ခု</b></div>
+    <div class="bet-row"><span>ရလဒ် မထည့်ရသေးတဲ့ ပွဲ</span><b id="wRes">9 ပွဲ (21.11.2026)</b></div>
+  </div>
+  <div class="card">
+    <h3>ပွဲစဉ် အခြေအနေ</h3>
+    <div class="set-row"><span>2D — 16.11.2026 မနက်ပိုင်း</span><button class="toggle on" onclick="toggleSession('2d','am',this)"></button></div>
+    <div class="set-row"><span>3D — 16.11.2026 ပွဲစဉ်</span><button class="toggle on" onclick="toggleSession('3d','round',this)"></button></div>
+    <div class="set-row"><span>ဘောပွဲ — 21.11.2026</span><button class="toggle on" onclick="toggleSession('fb','round',this)"></button></div>
+  </div>
+</div>
+
+<!-- requests -->
+<div class="screen" id="scr-req">
+  <div class="card" style="padding:0;overflow:hidden"><div class="tabs" style="margin:0">
+    <button class="on" data-rt="in" onclick="setReqTab('in')">ငွေသွင်း (<span id="cntIn">2</span>)</button>
+    <button data-rt="out" onclick="setReqTab('out')">ငွေထုတ် (<span id="cntOut">1</span>)</button>
+  </div></div>
+  <div id="reqIn">
+    <div class="req" id="rq1">
+      <div class="rhead"><span>User001</span><span class="badge pend">စောင့်နေတယ်</span></div>
+      <div class="ramt">50,000 ကျပ်</div>
+      <div class="rmeta">KBPay · 09xxxxxxxxx<br>2026-11-12 21:30 · လွှဲပြီးကြောင်း screenshot ပါတယ်</div>
+      <div class="rshot">📷 Screenshot — KBPay လွှဲငွေ (နမူနာ)</div>
+      <div class="ractions"><button class="btn-green" onclick="approveReq('rq1','in')">အတည်ပြုမယ်</button><button class="btn-red" onclick="rejectReq('rq1','in')">ပယ်မယ်</button></div>
+    </div>
+    <div class="req" id="rq2">
+      <div class="rhead"><span>User002</span><span class="badge pend">စောင့်နေတယ်</span></div>
+      <div class="ramt">20,000 ကျပ်</div>
+      <div class="rmeta">WavePay · 09xxxxxxxxx<br>2026-11-12 21:45 · လွှဲပြီးကြောင်း screenshot ပါတယ်</div>
+      <div class="rshot">📷 Screenshot — WavePay လွှဲငွေ (နမူနာ)</div>
+      <div class="ractions"><button class="btn-green" onclick="approveReq('rq2','in')">အတည်ပြုမယ်</button><button class="btn-red" onclick="rejectReq('rq2','in')">ပယ်မယ်</button></div>
+    </div>
+  </div>
+  <div id="reqOut" style="display:none">
+    <div class="req" id="rq3">
+      <div class="rhead"><span>User003</span><span class="badge pend">စောင့်နေတယ်</span></div>
+      <div class="ramt">30,000 ကျပ်</div>
+      <div class="rmeta">KBPay · 09123456789 · အမည်: User003<br>2026-11-12 20:15 · လက်ကျန် 100,000 ကျပ်</div>
+      <div class="ractions"><button class="btn-green" onclick="approveReq('rq3','out')">လွှဲပေးမယ်</button><button class="btn-red" onclick="rejectReq('rq3','out')">ပယ်မယ်</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- bets -->
+<div class="screen" id="scr-bets">
+  <div class="muted" style="margin-bottom:10px">ယူဆာ တစ်ဦးစီ နှိပ်ပြီး အသေးစိတ် စာရင်း ကြည့်ပါ</div>
+  <div id="betsList">
+  <div class="user-card" id="uc1">
+    <div class="user-head" onclick="toggleUser('uc1')"><span>User001 <span class="arr">›</span></span><span class="tot">17,000 ကျပ်</span></div>
+    <div class="user-body">
+      <div class="glabel">2D</div>
+      <div class="bet-row"><span class="what">45 · 78</span><span class="amt">10,000 ကျပ်</span></div>
+      <div class="glabel">3D</div>
+      <div class="bet-row"><span class="what">357</span><span class="amt">5,000 ကျပ်</span></div>
+      <div class="glabel">1D (ဘောပွဲ)</div>
+      <div class="bet-row"><span class="what">ဂိုးပေါ် — မန်စီးတီး vs ဖူလ်ဟမ် 3+25</span><span class="amt">2,000 ကျပ်</span></div>
+    </div>
+  </div>
+  <div class="user-card" id="uc2">
+    <div class="user-head" onclick="toggleUser('uc2')"><span>User002 <span class="arr">›</span></span><span class="tot">10,000 ကျပ်</span></div>
+    <div class="user-body">
+      <div class="glabel">2D</div>
+      <div class="bet-row"><span class="what">12 (အာ 21)</span><span class="amt">3,000 ကျပ်</span></div>
+      <div class="glabel">3D</div>
+      <div class="bet-row"><span class="what">123 · 321</span><span class="amt">2,000 ကျပ်</span></div>
+      <div class="glabel">1D (ဘောပွဲ)</div>
+      <div class="bet-row"><span class="what">မောင်း 3 ပွဲ — မန်စီးတီး · လာဇီယို · ရိုးမား</span><span class="amt">5,000 ကျပ်</span></div>
+    </div>
+  </div>
+  <div class="user-card" id="uc3">
+    <div class="user-head" onclick="toggleUser('uc3')"><span>User003 <span class="arr">›</span></span><span class="tot">25,000 ကျပ်</span></div>
+    <div class="user-body">
+      <div class="glabel">2D</div>
+      <div class="bet-row"><span class="what">90 · 09 · 99</span><span class="amt">15,000 ကျပ်</span></div>
+      <div class="glabel">1D (ဘောပွဲ)</div>
+      <div class="bet-row"><span class="what">ဘော်ဒီ — ရိုးမား 1-5</span><span class="amt">10,000 ကျပ်</span></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- results -->
+<div class="screen" id="scr-res">
+  <div class="sect">ဘောပွဲ ရလဒ် — API ကနေ auto ရောက်တယ်</div>
+  <div class="card">
+    <div class="muted" style="margin-bottom:6px">ဖြည့်စရာ မလို — ပွဲပြီးရင် API ကနေ ဂိုးရလဒ် အလိုအလျောက် ရောက်လာတယ်</div>
+    <div id="fbResults">
+    <div class="bet-row"><span>ရိုးမား vs ဆာဆူအိုလို</span><b>3 – 0</b></div>
+    <div class="bet-row"><span>လိဒ် vs တော့တင်ဟမ်</span><b>1 – 0</b></div>
+    <div class="bet-row"><span>အာဆင်နယ် vs ဟားလ်</span><b>1 – 0</b></div>
+    <div class="bet-row"><span>ဖူလ်ဟမ် vs နယူးကာဆယ်</span><b>1 – 1</b></div>
+    </div>
+    <div class="muted" style="margin-top:6px" id="fbResNote">07.11.2026 ရလဒ် (နမူနာ) · 21.11.2026 ပွဲတွေ ပြီးရင် ဒီမှာ auto ပေါ်မယ်</div>
+  </div>
+  <div class="sect">2D / 3D ပေါက်ဂဏန်း</div>
+  <div class="card">
+    <div class="res-in"><span style="flex:1">2D မနက်ပိုင်း</span><input type="text" id="win2dAm" placeholder="--" style="width:70px" maxlength="2"><span style="flex:1;text-align:right">ညနေပိုင်း</span><input type="text" id="win2dPm" placeholder="--" style="width:70px" maxlength="2"></div>
+    <div class="res-in"><span style="flex:1">3D ပွဲစဉ်</span><input type="text" id="win3d" placeholder="---" style="width:80px" maxlength="3"></div>
+    <button class="btn-navy" onclick="saveWins()">ပေါက်ဂဏန်း သိမ်းမယ်</button>
+  </div>
+</div>
+
+<!-- ledger -->
+<div class="screen" id="scr-ledger">
+  <div class="stats">
+    <div class="stat"><b id="ledTot2d">28,000</b><span>2D စုစုပေါင်း</span></div>
+    <div class="stat"><b id="ledTot3d">7,000</b><span>3D စုစုပေါင်း</span></div>
+    <div class="stat"><b id="ledTotFb">17,000</b><span>1D စုစုပေါင်း</span></div>
+    <div class="stat"><b id="ledTotAll">52,000</b><span>စုစုပေါင်း (ကျပ်)</span></div>
+  </div>
+  <div class="card" style="padding:0;overflow:hidden"><div class="tabs" style="margin:0">
+    <button class="on" data-led="2d" onclick="setLedTab('2d')">2D လယ်ဂျာ</button>
+    <button data-led="3d" onclick="setLedTab('3d')">3D လယ်ဂျာ</button>
+    <button data-led="fb" onclick="setLedTab('fb')">ဘောပွဲ လယ်ဂျာ</button>
+  </div></div>
+  <div class="card" id="ledPane2d">
+    <div class="lim-row">လီမစ် (ဂဏန်း တစ်လုံး) <input type="number" id="limLed2d" value="4000" onchange="onLimitChange('2d')"> ကျပ်</div>
+    <div class="muted" style="margin-bottom:6px">လီမစ်ကျော်ရင် အနီပေါ်မယ် · <span id="ledSub2d">စုစုပေါင်း 28,000 ကျပ်</span></div>
+    <div class="led-grid" id="ledGrid2d"></div>
+  </div>
+  <div class="card" id="ledPane3d" style="display:none">
+    <div class="lim-row">လီမစ် (ဂဏန်း တစ်လုံး) <input type="number" id="limLed3d" value="4000" onchange="onLimitChange('3d')"> ကျပ်</div>
+    <div class="muted" style="margin-bottom:6px">လီမစ်ကျော်ရင် အနီပေါ်မယ် · <span id="ledSub3d">စုစုပေါင်း 7,000 ကျပ်</span></div>
+    <div id="ledList3d"></div>
+  </div>
+  <div class="card" id="ledPaneFb" style="display:none">
+    <div class="lim-row">လီမစ် (တစ်ကွက်) <input type="number" id="limLedFb" value="8000" onchange="onLimitChange('fb')"> ကျပ်</div>
+    <div class="muted" style="margin-bottom:6px">လီမစ်ကျော်ရင် အနီပေါ်မယ် · <span id="ledSubFb">စုစုပေါင်း 17,000 ကျပ်</span></div>
+    <div id="ledListFb"></div>
+  </div>
+</div>
+
+<!-- bigsmall -->
+<div class="screen" id="scr-bigsmall">
+  <div class="card" style="padding:0;overflow:hidden"><div class="tabs" style="margin:0">
+    <button class="on" data-bs="2d" onclick="setBsTab('2d')">2D စာရင်း</button>
+    <button data-bs="3d" onclick="setBsTab('3d')">3D စာရင်း</button>
+    <button data-bs="body" onclick="setBsTab('body')">ဘော်ဒီစာရင်း</button>
+    <button data-bs="parlay" onclick="setBsTab('parlay')">မောင်းစာရင်း</button>
+  </div></div>
+  <div class="muted" style="margin-bottom:10px">အကြီးဆုံး (ငွေအများဆုံး) ကနေ အစဉ်လိုက် — ကော်ပီကူးလို့ရတယ်</div>
+  <div class="card" id="bsList"></div>
+  <button class="btn-navy" onclick="copyBs()">📋 ကော်ပီကူးမယ်</button>
+</div>
+
+<!-- summary -->
+<div class="screen" id="scr-summary">
+  <div class="stats">
+    <div class="stat"><b id="sumStake">52,000</b><span>ထိုးငွေ စုစုပေါင်း</span></div>
+    <div class="stat"><b id="sumBets">12</b><span>လောင်းကစား စုစုပေါင်း</span></div>
+    <div class="stat"><b id="sumPlayers">48</b><span>ကစားသမား</span></div>
+    <div class="stat warn"><b id="sumPend">3</b><span>အတည်ပြုရန် ကျန်</span></div>
+  </div>
+  <div class="card">
+    <h3>ဂိမ်း အလိုက်</h3>
+    <div class="bet-row"><span>2D</span><span class="amt" id="sum2d">28,000 ကျပ်</span></div>
+    <div class="bet-row"><span>3D</span><span class="amt" id="sum3d">7,000 ကျပ်</span></div>
+    <div class="bet-row"><span>ဘောပွဲ (1D)</span><span class="amt" id="sumFb">17,000 ကျပ်</span></div>
+  </div>
+  <div class="card">
+    <h3>ယူဆာ အလိုက်</h3>
+    <div id="sumPerUser">
+    <div class="bet-row"><span class="who">User001</span><span class="amt">17,000 ကျပ်</span></div>
+    <div class="bet-row"><span class="who">User002</span><span class="amt">10,000 ကျပ်</span></div>
+    <div class="bet-row"><span class="who">User003</span><span class="amt">25,000 ကျပ်</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>ငွေသွင်း / ငွေထုတ်</h3>
+    <div class="bet-row"><span>ငွေသွင်း စောင့်နေတာ</span><span class="amt" id="sumIn">70,000 ကျပ် (2 ခု)</span></div>
+    <div class="bet-row"><span>ငွေထုတ် စောင့်နေတာ</span><span class="amt" id="sumOut">30,000 ကျပ် (1 ခု)</span></div>
+  </div>
+</div>
+
+<!-- settings -->
+<div class="screen" id="scr-set">
+  <div class="sect">ပေးချေမှု (အဆ)</div>
+  <div class="card">
+    <div class="set-row"><span>2D — 100 ကျပ် ထိုးရင်</span><span><input type="number" id="rate2d" value="9000"> ကျပ်</span></div>
+    <div class="set-row"><span>3D — 100 ကျပ် ထိုးရင်</span><span><input type="number" id="rate3d" value="65000"> ကျပ်</span></div>
+  </div>
+  <div class="sect">မောင်း အကောက်</div>
+  <div class="card">
+    <div class="set-row"><span>၂–၃ ပွဲ</span><span><input type="number" id="comm23" value="15"> %</span></div>
+    <div class="set-row"><span>၄–၇ ပွဲ</span><span><input type="number" id="comm47" value="20"> %</span></div>
+    <div class="set-row"><span>၈–၁၀ ပွဲ</span><span><input type="number" id="comm810" value="30"> %</span></div>
+    <div class="set-row"><span>မောင်း အများဆုံး</span><span><input type="number" id="maxLegs" value="10"> သင်း</span></div>
+  </div>
+  <div class="sect">ကန့်သတ်ချက်</div>
+  <div class="card">
+    <div class="set-row"><span>ဘောပွဲ အနည်းဆုံး</span><span><input type="number" id="minFb" value="500"> ကျပ်</span></div>
+    <div class="set-row"><span>2D / 3D အနည်းဆုံး</span><span><input type="number" id="min23" value="100"> ကျပ်</span></div>
+  </div>
+  <div class="sect">ပိတ်ချိန်</div>
+  <div class="card">
+    <div class="set-row"><span>2D မနက်ပိုင်း ပိတ်</span><span><input type="time" id="close2dAm" value="11:55" style="width:110px"></span></div>
+    <div class="set-row"><span>2D ညနေပိုင်း ပိတ်</span><span><input type="time" id="close2dPm" value="15:55" style="width:110px"></span></div>
+    <div class="set-row"><span>3D ပွဲစဉ် ပိတ်</span><span><input type="date" id="close3d" value="2026-11-16" style="width:150px"></span></div>
+  </div>
+  <div class="sect">ပိတ်ဂဏန်း</div>
+  <div class="card">
+    <div class="mini-tabs">
+      <button class="on" data-bg="2d" onclick="setBlockedGame('2d')">2D</button>
+      <button data-bg="3d" onclick="setBlockedGame('3d')">3D</button>
+    </div>
+    <div class="res-in">
+      <input type="text" id="blockedInput" placeholder="ဂဏန်း ရိုက်ပါ (ဥပမာ 45)" maxlength="3" style="margin:0;flex:1">
+      <button class="btn-navy" style="width:auto;padding:9px 16px" onclick="addBlocked()">ထည့်မယ်</button>
+    </div>
+    <div class="muted">ပိတ်ထားတဲ့ ဂဏန်း ထိုးသား ထိုးလို့ မရဘူး · လယ်ဂျာမှာ အနီ (လီမစ်ပြည့်တာနဲ့ တရောင်ထဲ) ပြမယ်</div>
+    <div class="chip-row" id="blockedChips"></div>
+  </div>
+  <button class="btn-navy" onclick="saveSettings()">သတ်မှတ်ချက် သိမ်းမယ်</button>
+</div>
+
+<nav>
+  <button class="on" data-scr="scr-home" onclick="go('scr-home')">ပင်မ</button>
+  <button data-scr="scr-req" onclick="go('scr-req')">တောင်းဆိုမှု</button>
+  <button data-scr="scr-bets" onclick="go('scr-bets')">လောင်းကစား</button>
+  <button data-scr="scr-res" onclick="go('scr-res')">ရလဒ်</button>
+  <button data-scr="scr-ledger" onclick="go('scr-ledger')">လယ်ဂျာ</button>
+  <button data-scr="scr-set" onclick="go('scr-set')">သတ်မှတ်ချက်</button>
+</nav>
+<div id="toast"></div>
+
+<script type="module" src="admin.js"></script>
+</body>
+</html>
