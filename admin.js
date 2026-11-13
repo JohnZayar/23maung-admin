@@ -730,7 +730,7 @@ async function saveSettings() {
     const s3 = latestSession('3d', 'round');
     if (sAm && closeAm) await PB.update('m23_sessions', sAm.id, { close_at: sAm.date + ' ' + closeAm + ':00' });
     if (sPm && closePm) await PB.update('m23_sessions', sPm.id, { close_at: sPm.date + ' ' + closePm + ':00' });
-    if (s3 && close3d) await PB.update('m23_sessions', s3.id, { close_at: close3d + ' 00:00:00' });
+    if (s3 && close3d) await PB.update('m23_sessions', s3.id, { close_at: s3.date + ' ' + close3d + ':00' });
     toast('သတ်မှတ်ချက် သိမ်းပြီ');
   } catch (e) {
     toast('သိမ်းလို့ မရဘူး — ' + (e.message || 'error'));
