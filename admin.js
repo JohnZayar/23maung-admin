@@ -395,9 +395,10 @@ async function rejectReq(id, kind) {
 // no name, no phone, no email to type. The account number is auto-generated
 // from the already-loaded players: take each player's email local-part,
 // strip leading non-digits, keep the trailing digits (e.g. "005" from
-// "005@23maung.local", "001" from "test001@23maung.local"), take the
-// highest, and use the next one (001 if none numeric). The player logs in
-// by typing just "005" — the Player app expands it to 005@23maung.local.
+// "23M005@23maung.local", "001" from "test001@23maung.local"), take the
+// highest, and use the next one ("23M001" if none numeric). "23M" is Pho's
+// brand symbol; the number after it is the user count. The player logs in
+// by typing just "23M005" — the Player app expands it to 23M005@23maung.local.
 function nextAccountNumber(players) {
   var max = 0;
   (players || []).forEach(function (p) {
@@ -408,15 +409,16 @@ function nextAccountNumber(players) {
   var n = max + 1;
   var taken = {};
   (players || []).forEach(function (p) { taken[String((p && p.email) || '')] = true; });
-  while (taken[String(n).padStart(3, '0') + '@23maung.local']) n++;
-  return String(n).padStart(3, '0');
+  while (taken['23M' + String(n).padStart(3, '0') + '@23maung.local']) n++;
+  return '23M' + String(n).padStart(3, '0');
 }
 
-// Player-account creation (Fix #3, v1.3 password-only): Admin (Pho) creates
-// accounts ONLY — no self-registration. m23_players is an auth collection,
-// so PocketBase requires email + password + passwordConfirm; the email is
-// auto-generated (NNN@23maung.local) and the player logs in with just NNN.
-// Balance starts 0 (Pho credits it via top-up approve).
+// Player-account creation (Fix #3, v1.3 password-only; v1.4 "23M" prefix):
+// Admin (Pho) creates accounts ONLY — no self-registration. m23_players is
+// an auth collection, so PocketBase requires email + password +
+// passwordConfirm; the email is auto-generated (23M005@23maung.local) and
+// the player logs in with just 23M005. Balance starts 0 (Pho credits it
+// via top-up approve).
 var _creatingPlayer = false;
 async function createPlayer() {
   if (_creatingPlayer) return;
