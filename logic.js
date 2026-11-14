@@ -72,7 +72,7 @@ export function computeBodyNet(fbBets) {
     (b.legs || []).forEach(function (leg) {
       const key = leg.fixture || (leg.home + ' vs ' + leg.away);
       if (!byKey[key]) {
-        byKey[key] = { home: leg.home || '', away: leg.away || '', h: 0, a: 0, over: 0, under: 0 };
+        byKey[key] = { key: key, home: leg.home || '', away: leg.away || '', h: 0, a: 0, over: 0, under: 0 };
       }
       const m = byKey[key];
       if (leg.kind === 'body') {

@@ -128,7 +128,22 @@ async function boot() {
 }
 
 // ---------------------------------------------------------------- load live data
-async function loadAll() {
+// Auto-refresh (same 30s poll as Player v1.6 startAutoRefresh): re-loads
+// while the tab is visible, plus once when it becomes visible again.
+// Guarded against double-start; only runs while logged in.
+var _autoTimer = null;
+function startAutoRefresh() {
+  if (_autoTimer) return;
+  _autoTimer = setInterval(function () {
+    if (document.hidden || !PB.isLoggedIn()) return;
+    loadAll(true);
+  }, 30000);
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && PB.isLoggedIn()) loadAll(true);
+  });
+}
+
+async function loadAll(quiet) {
   try {
     const settingsPage = await PB.getList('m23_settings', { filter: "key='main'", perPage: 1 });
     const sRow = (settingsPage.items || [])[0] || null;
@@ -151,12 +166,13 @@ async function loadAll() {
     state.loaded = true;
     recomputeFromLive();
     renderAll();
-    toast('ဒေတာ ရောက်ပြီ');
+    startAutoRefresh();
+    if (!quiet) toast('ဒေတာ ရောက်ပြီ');
   } catch (e) {
     // Collections may not exist yet (parent creates them) or network failed:
     // keep the mockup sample data on screen, do not blank the app.
     state.loaded = false;
-    toast('PocketBase ချိတ်မရဘူး — နမူနာ ဒေတာ ပြနေတယ်');
+    if (!quiet) toast('PocketBase ချိတ်မရဘူး — နမူနာ ဒေတာ ပြနေတယ်');
   }
 }
 
@@ -169,13 +185,13 @@ function recomputeFromLive() {
   LED2D = L.aggregate2D(b2);
   LED3D = L.aggregate3D(b3);
   LEDFB = state.betsFb.map(function (b) {
-    return { user: playerName(b.player), what: fbBetLabel(b), amt: b.stake || b.total || 0 };
+    return { user: playerName(b.player), what: fbBetLabel(b), amt: b.stake || b.total || 0, bet: b };
   });
   BS = {
     '2d': L.bsEntriesFromTotals(L.aggregate2D(state.bets2d)),
     '3d': L.bsEntriesFromTotals(L.aggregate3D(state.bets3d)),
     'parlay': L.sortBsDesc(state.betsFb.filter(function (b) { return b.type === 'parlay'; }).map(function (b) {
-      return { n: playerName(b.player) + ' — မောင်း ' + (b.legs || []).length + ' ပွဲ', v: b.stake || 0 };
+      return { n: playerName(b.player) + ' — မောင်း ' + (b.legs || []).length + ' ပွဲ', v: b.stake || 0, bet: b };
     }))
   };
   BODY_NET = L.computeBodyNet(state.betsFb);
@@ -196,6 +212,71 @@ function fbBetLabel(b) {
   }
   const team = l.pick === 'h' ? (l.home || '') : (l.away || '');
   return 'ဘော်ဒီ — ' + team + ' ' + (l.hcp || '');
+}
+
+// ---- football bet detail (Fix #4+#7) ---------------------------------------
+// Legs are stored on m23_bets_fb.legs (NOT "picks"):
+//   { fixture, home, away, kind:'body'|'goal', pick:'h'|'a'|'over'|'under',
+//     hcp:'1-5', over:'3+25', ah_line, gl_line, stake, res, pyar }
+// Team names on the leg are English; the fixture row (state.fixtures)
+// carries home_mm/away_mm — prefer those when loaded.
+function resText(res) {
+  if (res === 'win') return 'နိုင်';
+  if (res === 'halfWin') return 'နိုင်တစ်ဝက်';
+  if (res === 'halfLoss') return 'ရှုံးတစ်ဝက်';
+  if (res === 'loss') return 'ရှုံး';
+  if (res === 'push') return 'ပြန်';
+  return 'စောင့်';
+}
+function betStatusText(b) {
+  if (!b) return '';
+  if (b.status === 'won') return 'နိုင်';
+  if (b.status === 'lost') return 'ရှုံး';
+  if (b.status === 'settled') return 'ပြန်';
+  return 'စောင့်နေတယ်';
+}
+function betStatusClass(b) {
+  if (!b) return 'pend';
+  if (b.status === 'won') return 'ok';
+  if (b.status === 'lost') return 'no';
+  return 'pend';
+}
+function fixtureById(id) {
+  if (!id) return null;
+  return state.fixtures.find(function (f) { return f.id === id; }) || null;
+}
+function teamName(l, which) {
+  const fx = fixtureById(l.fixture);
+  if (fx) {
+    if (which === 'h') return fx.home_mm || fx.home || l.home || '';
+    return fx.away_mm || fx.away || l.away || '';
+  }
+  return which === 'h' ? (l.home || '') : (l.away || '');
+}
+// One leg as plain text: match + pick + odds + leg outcome.
+function legLine(l) {
+  const h = teamName(l, 'h'), a = teamName(l, 'a');
+  let s;
+  if (l.kind === 'goal') {
+    s = h + ' vs ' + a + ' · ' + (l.pick === 'over' ? 'ဂိုးပေါ်' : 'ဂိုးအောက်') + ' ' + (l.over || '');
+  } else if (l.pick === 'h') {
+    s = h + (l.hcp ? ' ' + l.hcp : '') + ' vs ' + a;
+  } else {
+    s = h + ' vs ' + a + (l.hcp ? ' ' + l.hcp : '');
+  }
+  return s + ' · ' + resText(l.res);
+}
+// Status badge line (with payout when settled) + one .fb-leg per leg.
+function fbDetailHtml(b) {
+  if (!b) return '';
+  const txt = betStatusText(b) +
+    ((b.status === 'won' || b.status === 'settled') && b.payout
+      ? ' · ရငွေ ' + fmt(b.payout) : '');
+  let out = '<div class="fb-leg"><span class="badge ' + betStatusClass(b) + '">' + esc(txt) + '</span></div>';
+  (b.legs || []).forEach(function (l) {
+    out += '<div class="fb-leg">' + esc(legLine(l)) + '</div>';
+  });
+  return out;
 }
 
 function renderAll() {
@@ -310,6 +391,44 @@ async function rejectReq(id, kind) {
   }
 }
 
+// Player-account creation (Fix #3): Admin (Pho) creates accounts ONLY —
+// no self-registration. m23_players is an auth collection, so PocketBase
+// requires email + password + passwordConfirm; the player logs in with the
+// email. Balance starts 0 (Pho credits it via top-up approve).
+var _creatingPlayer = false;
+async function createPlayer() {
+  if (_creatingPlayer) return;
+  if (!state.loaded) { toast('PocketBase ချိတ်ပြီးမှ အကောင့် ဖွင့်လို့ရတယ်'); return; }
+  const name = ($('newPlName').value || '').trim();
+  const phone = ($('newPlPhone').value || '').trim();
+  const email = ($('newPlEmail').value || '').trim();
+  const pass = $('newPlPass').value || '';
+  const msgEl = $('newPlMsg');
+  function fail(m) { if (msgEl) msgEl.textContent = m; toast(m); }
+  if (!name) return fail('နာမည် ဖြည့်ပါ');
+  if (!phone) return fail('ဖုန်း ဖြည့်ပါ');
+  if (!email || email.indexOf('@') < 1 || email.indexOf('.') < 0) return fail('email မှန်အောင် ဖြည့်ပါ');
+  if (pass.length < 8) return fail('Password အနည်းဆုံး ၈ လုံး ဖြစ်ရမယ်');
+  if (msgEl) msgEl.textContent = '';
+  _creatingPlayer = true;
+  try {
+    const rec = await PB.create('m23_players', {
+      email: email, password: pass, passwordConfirm: pass,
+      name: name, phone: phone, status: 'active', balance: 0
+    });
+    state.players.push(rec);
+    state.players.sort(function (a, b) { return String(a.name || '').localeCompare(String(b.name || '')); });
+    $('newPlName').value = ''; $('newPlPhone').value = ''; $('newPlEmail').value = ''; $('newPlPass').value = '';
+    renderDashboard(); renderSummary();
+    if (msgEl) msgEl.textContent = 'အကောင့် ဖွင့်ပြီ — ' + name + ' (' + email + ') · လက်ကျန် 0';
+    toast('အကောင့် ဖွင့်ပြီ — ' + name);
+  } catch (e) {
+    fail(e && e.status === 400 ? 'အဲဒီ email နဲ့ အကောင့် ရှိပြီးသား' : 'အကောင့် ဖွင့်လို့ မရဘူး — ' + (e.message || 'error'));
+  } finally {
+    _creatingPlayer = false;
+  }
+}
+
 // ---------------------------------------------------------------- bets tab
 function renderBets() {
   if (!state.loaded) return; // keep the mockup's three sample user cards
@@ -329,7 +448,13 @@ function renderBets() {
           ? b.lines.map(function (ln) { return ln.n + (ln.rev ? ' (အာ ' + L.reverse2(ln.n) + ')' : ''); }).join(' · ')
           : fbBetLabel(b);
         const amt = b.lines ? (b.total || 0) : (b.stake || 0);
-        return '<div class="bet-row"><span class="what">' + esc(what) + '</span><span class="amt">' + fmt(amt) + ' ကျပ်</span></div>';
+        var row = '<div class="bet-row"><span class="what">' + esc(what) + '</span><span class="amt">' + fmt(amt) + ' ကျပ်</span></div>';
+        if (!b.lines) {
+          // Football bet: status + one line per leg (match, pick, odds, outcome).
+          const det = fbDetailHtml(b);
+          if (det) row = '<div class="fb-bet">' + row + det + '</div>';
+        }
+        return row;
       }).join('');
     }
     const cid = 'uc-' + esc(p.id);
@@ -477,7 +602,9 @@ function renderLedgerFb() {
   var lim = limitOf('fb');
   var out = '';
   LEDFB.forEach(function (b) {
-    out += '<div class="bet-row' + (b.amt > lim ? ' over' : '') + '"><span><span class="who">' + esc(b.user) + '</span><br><span class="what">' + esc(b.what) + '</span></span><span class="amt">' + fmt(b.amt) + ' ကျပ်</span></div>';
+    const head = '<div class="bet-row' + (b.amt > lim ? ' over' : '') + '"><span><span class="who">' + esc(b.user) + '</span><br><span class="what">' + esc(b.what) + '</span></span><span class="amt">' + fmt(b.amt) + ' ကျပ်</span></div>';
+    const det = b.bet ? fbDetailHtml(b.bet) : '';
+    out += det ? '<div class="fb-bet">' + head + det + '</div>' : head;
   });
   w.innerHTML = out || '<div class="muted">ဘောပွဲ လောင်းကစား မရှိသေးဘူး</div>';
   const tot = LEDFB.reduce(function (a, b) { return a + (b.amt || 0); }, 0);
@@ -496,6 +623,15 @@ function netSide(x, y, xName, yName) { return L.netSide(x, y, xName, yName); }
 function renderBsBody() {
   var w = $('bsList');
   if (!w) return;
+  // Group live body bets by match (same key as computeBodyNet) so each
+  // bet's pick + goal-total pick + outcome shows under its match net.
+  var bodyByKey = {};
+  state.betsFb.forEach(function (b) {
+    if (b.type !== 'body') return;
+    var l0 = (b.legs || [])[0]; if (!l0) return;
+    var k = l0.fixture || (l0.home + ' vs ' + l0.away);
+    (bodyByKey[k] = bodyByKey[k] || []).push(b);
+  });
   var out = '';
   BODY_NET.forEach(function (m) {
     var bn = netSide(m.h, m.a, m.home, m.away);
@@ -503,7 +639,11 @@ function renderBsBody() {
     out += '<div class="net-match"><div class="nm-head">' + esc(m.home) + ' vs ' + esc(m.away) + '</div>';
     out += '<div class="net-row"><span>ဘော်ဒီ</span><span><b>' + esc(m.home) + ' ' + m.h + '</b> · <b>' + esc(m.away) + ' ' + m.a + '</b></span></div>';
     out += '<div class="net-row"><span>ဂိုးပေါင်း</span><span><b>ဂိုးပေါ် ' + m.over + '</b> · <b>အောက် ' + m.under + '</b></span></div>';
-    out += '<div class="net-res">အကျန်: ' + esc(bn.side) + (bn.amt ? ' ' + bn.amt : '') + ' · ' + esc(gn.side) + (gn.amt ? ' ' + gn.amt : '') + '</div></div>';
+    out += '<div class="net-res">အကျန်: ' + esc(bn.side) + (bn.amt ? ' ' + bn.amt : '') + ' · ' + esc(gn.side) + (gn.amt ? ' ' + gn.amt : '') + '</div>';
+    (bodyByKey[m.key] || []).forEach(function (b) {
+      out += '<div class="fb-leg"><b>' + esc(playerName(b.player)) + '</b> · ' + fmt(b.stake || 0) + ' ကျပ်</div>' + fbDetailHtml(b);
+    });
+    out += '</div>';
   });
   w.innerHTML = out || '<div class="muted">ဘော်ဒီ လောင်းကစား မရှိသေးဘူး</div>';
 }
@@ -532,7 +672,13 @@ function renderBs() {
   var list = L.sortBsDesc(BS[bsTab] || []);
   var out = '';
   list.forEach(function (e, i) {
-    out += '<div class="bs-row"><span><span class="rank">' + (i + 1) + '.</span> <span class="num">' + esc(e.n) + ' = ' + e.v + '</span></span></div>';
+    var row = '<div class="bs-row"><span><span class="rank">' + (i + 1) + '.</span> <span class="num">' + esc(e.n) + ' = ' + e.v + '</span></span></div>';
+    if (bsTab === 'parlay' && e.bet) {
+      // Parlay: one line per leg (match, pick, odds, outcome) + status.
+      out += '<div class="fb-bet">' + row + fbDetailHtml(e.bet) + '</div>';
+    } else {
+      out += row;
+    }
   });
   w.innerHTML = out || '<div class="muted">စာရင်း မရှိသေးဘူး</div>';
 }
@@ -540,7 +686,13 @@ function bsText() {
   if (bsTab === 'body') return bsBodyText();
   var list = L.sortBsDesc(BS[bsTab] || []);
   var lines = [BS_LABEL[bsTab]];
-  list.forEach(function (e, i) { lines.push((i + 1) + '. ' + e.n + ' = ' + e.v); });
+  list.forEach(function (e, i) {
+    lines.push((i + 1) + '. ' + e.n + ' = ' + e.v);
+    if (bsTab === 'parlay' && e.bet) {
+      lines.push('   ' + betStatusText(e.bet) + (((e.bet.status === 'won' || e.bet.status === 'settled') && e.bet.payout) ? ' · ရငွေ ' + e.bet.payout : ''));
+      (e.bet.legs || []).forEach(function (l) { lines.push('   ' + legLine(l)); });
+    }
+  });
   return lines.join('\n');
 }
 function copyBs() {
@@ -655,6 +807,24 @@ function renderSettings() {
   if (s.max_legs !== undefined) $('maxLegs').value = s.max_legs;
   if (s.min_fb !== undefined) $('minFb').value = s.min_fb;
   if (s.min_2d3d !== undefined) $('min23').value = s.min_2d3d;
+  // Fix #5: populate the close-time inputs from the latest sessions'
+  // saved close_at (HH:MM out of 'YYYY-MM-DD HH:MM:SS' or ISO). Without
+  // this the inputs always showed the hardcoded HTML defaults (11:55 /
+  // 15:55 / 16:00). No session/close_at for a slot -> keep the default.
+  const sAm = latestSession('2d', 'am');
+  const sPm = latestSession('2d', 'pm');
+  const s3 = latestSession('3d', 'round');
+  let t;
+  if (sAm && (t = timeFromCloseAt(sAm.close_at))) $('close2dAm').value = t;
+  if (sPm && (t = timeFromCloseAt(sPm.close_at))) $('close2dPm').value = t;
+  if (s3 && (t = timeFromCloseAt(s3.close_at))) $('close3d').value = t;
+}
+// 'YYYY-MM-DD HH:MM:SS' or ISO 'YYYY-MM-DDTHH:MM:SS.000Z' -> 'HH:MM'.
+// saveSettings writes the space format, so the digits round-trip as saved.
+function timeFromCloseAt(closeAt) {
+  if (!closeAt) return null;
+  const m = String(closeAt).match(/(\d{2}):(\d{2})/);
+  return m ? m[1] + ':' + m[2] : null;
 }
 function renderHomeSessions() {
   if (!state.loaded) return;
@@ -760,9 +930,13 @@ window.renderLedger3D = renderLedger3D;
 window.renderLedgerFb = renderLedgerFb;
 window.approveReq = approveReq;
 window.rejectReq = rejectReq;
+window.createPlayer = createPlayer;
 window.saveWins = saveWins;
 window.saveSettings = saveSettings;
 window.toggleSession = toggleSession;
 window.onLimitChange = onLimitChange;
 window.loginAdmin = loginAdmin;
 window.settleFootballNow = settleFootballNow;
+
+// Named exports for Node tests (browser module load ignores them).
+export { timeFromCloseAt, resText, betStatusText, betStatusClass, legLine, fbDetailHtml };
