@@ -861,11 +861,17 @@ function renderHomeSessions() {
     rows[1].querySelector('span').textContent = '3D — ' + (s3 ? (s3.label || s3.date) : 'session မရှိသေးဘူး');
     rows[1].querySelector('.toggle').classList.toggle('on', !!(s3 && s3.open));
   }
+  if (rows[2]) {
+    // Football has no session row: its on/off lives in m23_settings.football_enabled (default ON).
+    const fbOn = !state.settings || state.settings.football_enabled !== false;
+    rows[2].querySelector('.toggle').classList.toggle('on', fbOn);
+  }
 }
 
 // Session open/close toggles on Home write m23_sessions.open.
-// Football has no session row: its close rule (5 min before kickoff) lives
-// in the player app, so the toggle only explains that.
+// Football has no session row: its toggle flips m23_settings.football_enabled
+// (Pho Nov 13 — real on/off switch; player greys မောင်း/ဘော်ဒီ when OFF).
+// The per-match auto-close (5 min before kickoff) still lives in the player app.
 async function toggleSession(game, period, btn) {
   if (!state.loaded) {
     btn.classList.toggle('on');
@@ -873,7 +879,22 @@ async function toggleSession(game, period, btn) {
     return;
   }
   if (game === 'fb') {
-    toast('ဘောပွဲ — ပွဲတိုင်း kickoff ၅ မိနစ်အလို auto ပိတ်တယ်');
+    // Football on/off switch (Pho Nov 13, option A): flips m23_settings.football_enabled.
+    // Default ON when the field is missing; the player app greys မောင်း/ဘော်ဒီ when OFF.
+    const curOn = !state.settings || state.settings.football_enabled !== false;
+    const next = !curOn;
+    try {
+      if (state.settingsId) {
+        state.settings = await PB.update('m23_settings', state.settingsId, { football_enabled: next });
+      } else {
+        state.settings = await PB.create('m23_settings', { key: 'main', football_enabled: next });
+        state.settingsId = state.settings.id;
+      }
+      btn.classList.toggle('on', next);
+      toast('ဘောပွဲ ' + (next ? 'ဖွင့်ပြီ' : 'ပိတ်ပြီ'));
+    } catch (e) {
+      toast('ပြောင်းလို့ မရဘူး — ' + (e.message || 'error'));
+    }
     return;
   }
   const sess = latestSession(game, period);
