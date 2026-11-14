@@ -391,39 +391,57 @@ async function rejectReq(id, kind) {
   }
 }
 
-// Player-account creation (Fix #3): Admin (Pho) creates accounts ONLY —
-// no self-registration. m23_players is an auth collection, so PocketBase
-// requires email + password + passwordConfirm; the player logs in with the
-// email. Balance starts 0 (Pho credits it via top-up approve).
+// Short-account numbers (v1.3): Pho creates accounts with password ONLY —
+// no name, no phone, no email to type. The account number is auto-generated
+// from the already-loaded players: take each player's email local-part,
+// strip leading non-digits, keep the trailing digits (e.g. "005" from
+// "005@23maung.local", "001" from "test001@23maung.local"), take the
+// highest, and use the next one (001 if none numeric). The player logs in
+// by typing just "005" — the Player app expands it to 005@23maung.local.
+function nextAccountNumber(players) {
+  var max = 0;
+  (players || []).forEach(function (p) {
+    var local = String((p && p.email) || '').split('@')[0];
+    var digits = local.replace(/^\D+/, '').match(/\d+$/);
+    if (digits) max = Math.max(max, parseInt(digits[0], 10));
+  });
+  var n = max + 1;
+  var taken = {};
+  (players || []).forEach(function (p) { taken[String((p && p.email) || '')] = true; });
+  while (taken[String(n).padStart(3, '0') + '@23maung.local']) n++;
+  return String(n).padStart(3, '0');
+}
+
+// Player-account creation (Fix #3, v1.3 password-only): Admin (Pho) creates
+// accounts ONLY — no self-registration. m23_players is an auth collection,
+// so PocketBase requires email + password + passwordConfirm; the email is
+// auto-generated (NNN@23maung.local) and the player logs in with just NNN.
+// Balance starts 0 (Pho credits it via top-up approve).
 var _creatingPlayer = false;
 async function createPlayer() {
   if (_creatingPlayer) return;
   if (!state.loaded) { toast('PocketBase ချိတ်ပြီးမှ အကောင့် ဖွင့်လို့ရတယ်'); return; }
-  const name = ($('newPlName').value || '').trim();
-  const phone = ($('newPlPhone').value || '').trim();
-  const email = ($('newPlEmail').value || '').trim();
   const pass = $('newPlPass').value || '';
   const msgEl = $('newPlMsg');
   function fail(m) { if (msgEl) msgEl.textContent = m; toast(m); }
-  if (!name) return fail('နာမည် ဖြည့်ပါ');
-  if (!phone) return fail('ဖုန်း ဖြည့်ပါ');
-  if (!email || email.indexOf('@') < 1 || email.indexOf('.') < 0) return fail('email မှန်အောင် ဖြည့်ပါ');
   if (pass.length < 8) return fail('Password အနည်းဆုံး ၈ လုံး ဖြစ်ရမယ်');
   if (msgEl) msgEl.textContent = '';
+  const nnn = nextAccountNumber(state.players);
+  const email = nnn + '@23maung.local';
   _creatingPlayer = true;
   try {
     const rec = await PB.create('m23_players', {
       email: email, password: pass, passwordConfirm: pass,
-      name: name, phone: phone, status: 'active', balance: 0
+      name: nnn, phone: '', status: 'active', balance: 0
     });
     state.players.push(rec);
     state.players.sort(function (a, b) { return String(a.name || '').localeCompare(String(b.name || '')); });
-    $('newPlName').value = ''; $('newPlPhone').value = ''; $('newPlEmail').value = ''; $('newPlPass').value = '';
+    $('newPlPass').value = '';
     renderDashboard(); renderSummary();
-    if (msgEl) msgEl.textContent = 'အကောင့် ဖွင့်ပြီ — ' + name + ' (' + email + ') · လက်ကျန် 0';
-    toast('အကောင့် ဖွင့်ပြီ — ' + name);
+    if (msgEl) msgEl.textContent = 'အကောင့် ' + nnn + ' ဖွင့်ပြီးပြီ — Account: ' + nnn + ' · Password: ရိုက်ထားတဲ့အတိုင်း';
+    toast('အကောင့် ' + nnn + ' ဖွင့်ပြီ');
   } catch (e) {
-    fail(e && e.status === 400 ? 'အဲဒီ email နဲ့ အကောင့် ရှိပြီးသား' : 'အကောင့် ဖွင့်လို့ မရဘူး — ' + (e.message || 'error'));
+    fail(e && e.status === 400 ? 'အဲဒီ အကောင့် ရှိပြီးသား' : 'အကောင့် ဖွင့်လို့ မရဘူး — ' + (e.message || 'error'));
   } finally {
     _creatingPlayer = false;
   }
@@ -939,4 +957,4 @@ window.loginAdmin = loginAdmin;
 window.settleFootballNow = settleFootballNow;
 
 // Named exports for Node tests (browser module load ignores them).
-export { timeFromCloseAt, resText, betStatusText, betStatusClass, legLine, fbDetailHtml };
+export { timeFromCloseAt, resText, betStatusText, betStatusClass, legLine, fbDetailHtml, nextAccountNumber };
