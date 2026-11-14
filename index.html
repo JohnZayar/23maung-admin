@@ -46,8 +46,8 @@
   .bet-row .who { font-weight: bold; }
   .bet-row .what { color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .bet-row .amt { font-weight: bold; color: #1e3a5f; white-space: nowrap; flex-shrink: 0; }
-  input[type=text], input[type=number], select { width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px; font-size: 15px; font-family: inherit; margin-bottom: 8px; outline: none; background: #fbfdff; }
-  input[type=text]:focus, input[type=number]:focus, select:focus { border-color: #1e3a5f; box-shadow: 0 0 0 3px rgba(30,58,95,.12); background: #fff; }
+  input[type=text], input[type=number], input[type=password], input[type=tel], input[type=email], select { width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px; font-size: 15px; font-family: inherit; margin-bottom: 8px; outline: none; background: #fbfdff; }
+  input[type=text]:focus, input[type=number]:focus, input[type=password]:focus, input[type=tel]:focus, input[type=email]:focus, select:focus { border-color: #1e3a5f; box-shadow: 0 0 0 3px rgba(30,58,95,.12); background: #fff; }
   .set-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 2px; border-bottom: 1px solid #f1f5f9; font-size: 14px; gap: 8px; }
   .set-row > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .set-row:last-child { border-bottom: none; }
@@ -108,6 +108,10 @@
   .bs-row .rank { color: #64748b; width: 26px; }
   .bs-row .num { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .bs-row .amt { font-weight: bold; color: #1e3a5f; white-space: nowrap; flex-shrink: 0; }
+  .fb-bet { border-bottom: 1px solid #f1f5f9; padding-bottom: 5px; margin-bottom: 5px; }
+  .fb-bet:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+  .fb-bet .bet-row, .fb-bet .bs-row { border-bottom: none; padding-bottom: 1px; }
+  .fb-leg { font-size: 12px; color: #64748b; padding: 2px 2px 2px 12px; line-height: 1.6; }
 </style>
 </head>
 <body>
@@ -123,7 +127,7 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v1.1</span></div>
+<div class="topbar"><h1><img src="logo.png" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v1.2</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
@@ -157,6 +161,16 @@
 
 <!-- requests -->
 <div class="screen" id="scr-req">
+  <div class="card">
+    <h3>အကောင့်သစ် ဖွင့်မယ်</h3>
+    <div class="muted" style="margin-bottom:8px">Admin ကပဲ အကောင့် ဖွင့်ပေးတယ် — ငွေသွင်းပြီးမှ ဖွင့်ပါ။ လက်ကျန် 0 ကနေ စမယ်။</div>
+    <input type="text" id="newPlName" placeholder="နာမည် (ဥပမာ User004)" autocomplete="off">
+    <input type="tel" id="newPlPhone" placeholder="ဖုန်း (ဥပမာ 09123456789)" autocomplete="off">
+    <input type="email" id="newPlEmail" placeholder="အကောင့် email (ဥပမာ user004@23maung.local)" autocomplete="off">
+    <input type="password" id="newPlPass" placeholder="Password (အနည်းဆုံး ၈ လုံး)" autocomplete="new-password">
+    <button class="btn-navy" onclick="createPlayer()">အကောင့် ဖွင့်မယ်</button>
+    <p class="muted" id="newPlMsg" style="margin-top:8px"></p>
+  </div>
   <div class="card" style="padding:0;overflow:hidden"><div class="tabs" style="margin:0">
     <button class="on" data-rt="in" onclick="setReqTab('in')">ငွေသွင်း (<span id="cntIn">2</span>)</button>
     <button data-rt="out" onclick="setReqTab('out')">ငွေထုတ် (<span id="cntOut">1</span>)</button>
