@@ -55,6 +55,76 @@ export function bsEntriesFromTotals(tot) {
   return sortBsDesc(Object.keys(tot).map(function (n) { return { n: n, v: tot[n] }; }));
 }
 
+// ---- Myanmar odds (ported verbatim from feed/myanmar-odds.js) ---------------
+// Pho's CONFIRMED rule (Nov 11): direct transcription of the API LINE.
+// goal = integer part of |line| (0 renders '='), pyar digits = fraction
+// digits (.25->25, .5->5), sign '-' if line<0 / '+' if line>0 when
+// fraction!=0, '=' when fraction==0 or line==0. Applies to body (AH) and
+// goal total (GL). Decimal odds are NOT used for display.
+// Ground truth: -1.25->'1-25', 1.25->'1+25', -1.5->'1-5', 3->'3=',
+// -0.25->'=-25', 0.5->'=+5'.
+export function lineToMyanmar(line) {
+  if (line == null) return null;
+  const rounded = Math.round(line * 100) / 100;
+  if (rounded === 0) return '=';
+  const neg = rounded < 0;
+  const absStr = String(Math.abs(rounded));
+  const parts = absStr.split('.');
+  const goalInt = parseInt(parts[0], 10);
+  const frac = parts.length > 1 ? parts[1].replace(/0+$/, '') : '';
+  const goalStr = goalInt === 0 ? '=' : String(goalInt);
+  if (!frac) return goalStr === '=' ? '=' : goalStr + '=';
+  const sign = neg ? '-' : '+';
+  return goalStr + sign + frac;
+}
+
+// Short team names for the ledger header / list lines (Pho's examples:
+// Mu, Real, Liver, Ars, Tra, Che). No short-name map existed in the
+// codebase (TEAM_MM is Burmese full names; legs carry full English names),
+// so this map is the ledger's single source. Fallback = first word.
+const TEAM_SHORT = {
+  'Manchester United': 'Mu', 'Man Utd': 'Mu', 'Man United': 'Mu',
+  'Real Madrid': 'Real',
+  'Liverpool': 'Liver',
+  'Arsenal': 'Ars',
+  'Chelsea': 'Che',
+  'Troyes': 'Tra',
+  'Man City': 'City',
+  'Tottenham': 'Spurs',
+  'Roma': 'Roma', 'Napoli': 'Napoli', 'Torino': 'Torino',
+  'Celta Vigo': 'Celta', 'Sassuolo': 'Sassuolo', 'Lazio': 'Lazio',
+  'Fulham': 'Fulham', 'Como': 'Como', 'Parma': 'Parma', 'PSG': 'PSG',
+  'Leeds': 'Leeds', 'Hull': 'Hull',
+  'Athletic Club': 'Athletic', 'Augsburg': 'Aug', 'Auxerre': 'Aux',
+  'Bayer Leverkusen': 'Lever', 'Bayern Munich': 'Bayern',
+  'Bologna': 'Bol', 'Borussia Dortmund': 'Dort',
+  "Borussia M'gladbach": 'Glad', 'CD Alaves': 'Alaves',
+  'Cagliari': 'Cag', 'Deportivo A Coruna': 'Depor',
+  'Eintracht Frankfurt': 'Frank', 'Elversberg': 'Elv',
+  'Espanyol': 'Esp', 'Frosinone': 'Fro', 'Lecce': 'Lec',
+  'Mainz': 'Mainz', 'Malaga': 'Mal', 'Newcastle': 'New',
+  'Nottm Forest': 'Forest', 'Osasuna': 'Osa', 'Paderborn': 'Pad',
+  'Paris FC': 'Paris', 'RB Leipzig': 'Leip',
+  'Racing Santander': 'Racing', 'SC Freiburg': 'Frei',
+  'TSG Hoffenheim': 'Hof', 'Union Berlin': 'Union',
+  'Valencia': 'Val', 'VfB Stuttgart': 'Stutt',
+  'Werder Bremen': 'Werder',
+  'Inter': 'Inter', 'AC Milan': 'Milan', 'Juventus': 'Juve',
+  'Barcelona': 'Barca', 'Atletico Madrid': 'Atletico',
+  'Sevilla': 'Sevilla', 'Real Sociedad': 'Sociedad',
+  'Villarreal': 'Villarreal', 'Real Betis': 'Betis',
+  'Everton': 'Everton', 'West Ham': 'West Ham',
+  'Aston Villa': 'Villa', 'Brighton': 'Brighton',
+  'Brentford': 'Brent', 'Wolves': 'Wolves',
+  'Crystal Palace': 'Palace', 'Bournemouth': 'Bourne'
+};
+export function teamShort(name) {
+  if (!name) return '';
+  if (TEAM_SHORT[name]) return TEAM_SHORT[name];
+  const first = String(name).split(' ')[0];
+  return first || String(name);
+}
+
 // ---- Football body NET (ကြီးငယ် ဘော်ဒီစာရင်း) ---------------------------------
 // Mockup v2.4 netSide, verbatim logic: offset both sides, equal = "မျှ".
 export function netSide(x, y, xName, yName) {
@@ -72,19 +142,384 @@ export function computeBodyNet(fbBets) {
     (b.legs || []).forEach(function (leg) {
       const key = leg.fixture || (leg.home + ' vs ' + leg.away);
       if (!byKey[key]) {
-        byKey[key] = { key: key, home: leg.home || '', away: leg.away || '', h: 0, a: 0, over: 0, under: 0 };
+        byKey[key] = { key: key, home: leg.home || '', away: leg.away || '', h: 0, a: 0, over: 0, under: 0, bodyOdds: '', goalOdds: '' };
       }
       const m = byKey[key];
       if (leg.kind === 'body') {
+        // Odds: prefer the stored Myanmar string the player app placed
+        // with (leg.hcp, from m23_odds via the feed converter), fall back
+        // to rendering the numeric line (lineToMyanmar).
+        if (!m.bodyOdds) m.bodyOdds = leg.hcp || lineToMyanmar(leg.ah_line) || '';
         if (leg.pick === 'h') m.h += leg.stake || 0;
         else if (leg.pick === 'a') m.a += leg.stake || 0;
       } else if (leg.kind === 'goal') {
+        if (!m.goalOdds) m.goalOdds = leg.over || lineToMyanmar(leg.gl_line) || '';
         if (leg.pick === 'over') m.over += leg.stake || 0;
         else if (leg.pick === 'under') m.under += leg.stake || 0;
       }
     });
   });
   return Object.keys(byKey).map(function (k) { return byKey[k]; });
+}
+
+// ---- Body-ledger nets + hedges (Admin v1.6) --------------------------------
+// Net per side: body = |home - away| (bigger side), goal = |over - under|.
+// Equal amounts -> side null (renders 'မျှ').
+export function bodyNetOf(m) {
+  const h = m.h || 0, a = m.a || 0;
+  if (h === a) return { net: 0, side: null };
+  return h > a ? { net: h - a, side: 'h' } : { net: a - h, side: 'a' };
+}
+export function goalNetOf(m) {
+  const o = m.over || 0, u = m.under || 0;
+  if (o === u) return { net: 0, side: null };
+  return o > u ? { net: o - u, side: 'over' } : { net: u - o, side: 'under' };
+}
+// Remaining after a hedge; over-net hedges stop at 0 (clamped at Save too).
+export function remainingAfterHedge(net, hedgeAmt) {
+  return Math.max(0, (net || 0) - (hedgeAmt || 0));
+}
+// Ledger card header: '[bodyOdds] [Home short] & [Away short] / {[goalOdds]}'.
+export function ledgerHeaderText(m) {
+  const hs = teamShort(m.home), as = teamShort(m.away);
+  const b = m.bodyOdds || '';
+  const g = m.goalOdds || '';
+  return (b ? b + ' ' : '') + hs + ' & ' + as + (g ? ' / {' + g + '}' : '');
+}
+// One entry line for the စာရင်းချုပ် lists (Pho's EXACT format):
+// body '(odds)Team amount', goal '(odds)Team(⬆️/⬇️)amount'.
+// entry = { kind:'body'|'goal', odds, team (short), side ('over'|'under' for goal), amount }.
+export function entryLineText(e) {
+  const odds = e.odds || '';
+  const team = e.team || '';
+  const amt = e.amount || 0;
+  if (e.kind === 'goal') {
+    const dir = e.side === 'under' ? '⬇️' : '⬆️';
+    return '(' + odds + ')' + team + '(' + dir + ')' + amt;
+  }
+  return '(' + odds + ')' + team + ' ' + amt;
+}
+// Gold hedge line on a ledger card: 'အကန် ⬆️150000' / 'အကန် Real 330000'.
+// (body hedge shows the net-side team; goal hedge shows the arrow.)
+export function hedgeLineText(h) {
+  if (!h) return '';
+  if (h.kind === 'goal') {
+    const dir = h.side === 'under' ? '⬇️' : '⬆️';
+    return 'အကန် ' + dir + (h.amount || 0);
+  }
+  return 'အကန် ' + (h.team || '') + ' ' + (h.amount || 0);
+}
+// Group body bets by bettor name -> [{ name, lines: [entryLineText] }].
+// betsFb: body bets (type 'body'); nameOf: (playerId) -> display name.
+// Bettors sorted ascending by name; a bettor's lines in bet order.
+// A leg becomes one entry: body -> its picked team; goal -> the match's
+// home team (short) with the over/under arrow (goal lines carry no team
+// of their own; Pho's format puts the home team there).
+export function groupBettorEntries(betsFb, nameOf) {
+  const byName = {};
+  const order = [];
+  (betsFb || []).forEach(function (b) {
+    if (b.type !== 'body') return;
+    const name = (nameOf && nameOf(b.player)) || String(b.player || '');
+    if (!byName[name]) { byName[name] = []; order.push(name); }
+    (b.legs || []).forEach(function (leg) {
+      if (leg.kind === 'body') {
+        const team = teamShort(leg.pick === 'h' ? leg.home : leg.away);
+        byName[name].push(entryLineText({ kind: 'body', odds: leg.hcp || lineToMyanmar(leg.ah_line) || '', team: team, amount: leg.stake || 0 }));
+      } else if (leg.kind === 'goal') {
+        const team = teamShort(leg.home);
+        byName[name].push(entryLineText({ kind: 'goal', odds: leg.over || lineToMyanmar(leg.gl_line) || '', team: team, side: leg.pick, amount: leg.stake || 0 }));
+      }
+    });
+  });
+  order.sort();
+  return order.map(function (name) { return { name: name, lines: byName[name] }; });
+}
+// Group hedges by bookie -> [{ bookie, lines: [entryLineText] }].
+// Bookies in first-appearance order; within a bookie, lines are ordered by
+// match (first appearance) with the goal line before the body line per match.
+export function groupHedgeEntries(hedges) {
+  const byBookie = {};
+  const bookieOrder = [];
+  (hedges || []).forEach(function (h) {
+    const bookie = h.bookie || '';
+    if (!byBookie[bookie]) { byBookie[bookie] = []; bookieOrder.push(bookie); }
+    byBookie[bookie].push(h);
+  });
+  return bookieOrder.map(function (bookie) {
+    const rows = byBookie[bookie];
+    // Order by match (first appearance), goal before body within a match.
+    const fxOrder = [];
+    const byFx = {};
+    rows.forEach(function (h) {
+      const fx = h.fixture || '';
+      if (!byFx[fx]) { byFx[fx] = { goal: [], body: [] }; fxOrder.push(fx); }
+      if (h.kind === 'goal') byFx[fx].goal.push(h); else byFx[fx].body.push(h);
+    });
+    const lines = [];
+    fxOrder.forEach(function (fx) {
+      byFx[fx].goal.forEach(function (h) { lines.push(entryLineText({ kind: 'goal', odds: h.odds || '', team: h.team || '', side: h.side, amount: h.amount || 0 })); });
+      byFx[fx].body.forEach(function (h) { lines.push(entryLineText({ kind: 'body', odds: h.odds || '', team: h.team || '', amount: h.amount || 0 })); });
+    });
+    return { bookie: bookie, lines: lines };
+  });
+}
+// 'စာရင်းချုပ် ကူးမယ်' copy text: headings + names + one-line entries,
+// blank line between names, no totals.
+export function fbsumCopyText(bettorGroups, hedgeGroups) {
+  const parts = [];
+  parts.push('ထိုးသားစာရင်း');
+  (bettorGroups || []).forEach(function (g) {
+    parts.push('');
+    parts.push(g.name);
+    g.lines.forEach(function (ln) { parts.push(ln); });
+  });
+  parts.push('');
+  parts.push('အကန်စာရင်း');
+  if (!hedgeGroups || !hedgeGroups.length) {
+    parts.push('');
+    parts.push('အကန် မရှိသေးပါ');
+  } else {
+    hedgeGroups.forEach(function (g) {
+      parts.push('');
+      parts.push(g.bookie);
+      g.lines.forEach(function (ln) { parts.push(ln); });
+    });
+  }
+  return parts.join('\n').replace(/\n+$/, '');
+}
+// Ledger copy-all: per match the header, amounts, post-hedge net line and
+// an optional 'အကန် …' line; blank line between matches.
+// matches: computeBodyNet rows; hedgeByKey: match key -> {body, goal} rows.
+export function ledgerCopyText(matches, hedgeByKey) {
+  const blocks = [];
+  (matches || []).forEach(function (m) {
+    const hedges = (hedgeByKey && hedgeByKey[m.key]) || {};
+    const bn = bodyNetOf(m), gn = goalNetOf(m);
+    const bRem = remainingAfterHedge(bn.net, hedges.body ? hedges.body.amount : 0);
+    const gRem = remainingAfterHedge(gn.net, hedges.goal ? hedges.goal.amount : 0);
+    const lines = [];
+    lines.push(ledgerHeaderText(m));
+    lines.push((m.h || 0) + ' ' + (m.a || 0) + ' ⬆️' + (m.over || 0));
+    lines.push('⬇️' + (m.under || 0));
+    const bTxt = bRem === 0 ? 'မျှ' : (bn.side === 'h' ? teamShort(m.home) : teamShort(m.away)) + ' ' + bRem;
+    const gTxt = gRem === 0 ? 'မျှ' : '{' + (gn.side === 'over' ? '⬆️' : '⬇️') + gRem + '}';
+    lines.push(bTxt + ' ' + gTxt);
+    const hl = [];
+    if (hedges.body) hl.push(hedgeLineText(hedges.body));
+    if (hedges.goal) hl.push(hedgeLineText(hedges.goal));
+    if (hl.length) lines.push(hl.join(' · '));
+    blocks.push(lines.join('\n'));
+  });
+  return blocks.join('\n\n');
+}
+
+// ---- Hedge persistence (m23_hedges) ----------------------------------------
+// Load all hedge rows (Admin signs in as superuser; players never read them).
+export async function loadHedges(pb) {
+  return pb.getAll('m23_hedges', { sort: '-created' });
+}
+// Index hedges by match key. m23_hedges.fixture is the fixture api_id, while
+// computeBodyNet keys (and leg.fixture) are the fixture PB id, so the join
+// maps api_id -> PB id via the fixtures list. A hedge whose fixture matches
+// no known fixture is indexed under its api_id as a fallback key.
+export function indexHedgesByMatch(hedges, fixtures) {
+  const apiToPb = {};
+  (fixtures || []).forEach(function (f) { if (f.api_id) apiToPb[f.api_id] = f.id; });
+  const byMatch = {};
+  (hedges || []).forEach(function (h) {
+    const key = apiToPb[h.fixture] || h.fixture;
+    if (!byMatch[key]) byMatch[key] = { body: null, goal: null };
+    if (h.kind === 'body') byMatch[key].body = h;
+    else if (h.kind === 'goal') byMatch[key].goal = h;
+  });
+  return byMatch;
+}
+// Distinct bookie names already used (for the hedge panel datalist; starts
+// empty and grows from Pho's entries — no predefined list).
+export function usedBookies(hedges) {
+  const seen = {};
+  const out = [];
+  (hedges || []).forEach(function (h) {
+    const b = (h.bookie || '').trim();
+    if (b && !seen[b]) { seen[b] = true; out.push(b); }
+  });
+  return out;
+}
+// Save one match's hedges. existing = {body, goal} current rows for the
+// match (or nulls); drafts = {body:{amount,bookie}|null, goal:{amount,bookie,side}|null};
+// matchInfo = { fixtureApiId, date, home, away, bodyOdds, goalOdds,
+//   bodyTeam (net-side short), goalTeam (home short) }.
+// Amount > 0: create (no row) or update (row exists). Amount 0 / no draft:
+// delete the row if one exists. Hedge amounts are clamped to the net at
+// Save (remaining stops at 0) — the stored amount never exceeds the net.
+export async function saveHedges(pb, existing, matchInfo, drafts) {
+  const kinds = ['body', 'goal'];
+  for (let i = 0; i < kinds.length; i++) {
+    const kind = kinds[i];
+    const draft = drafts ? drafts[kind] : null;
+    const row = existing ? existing[kind] : null;
+    const amt = draft ? Math.max(0, Math.round(draft.amount || 0)) : 0;
+    if (amt <= 0) {
+      if (row && row.id) await pb.del('m23_hedges', row.id);
+      continue;
+    }
+    const body = {
+      fixture: matchInfo.fixtureApiId,
+      kind: kind,
+      team: kind === 'body' ? matchInfo.bodyTeam : matchInfo.goalTeam,
+      side: kind === 'goal' ? (draft.side || '') : '',
+      odds: kind === 'body' ? (matchInfo.bodyOdds || '') : (matchInfo.goalOdds || ''),
+      amount: amt,
+      bookie: (draft.bookie || '').trim(),
+      date: matchInfo.date || '',
+      home: matchInfo.home || '',
+      away: matchInfo.away || ''
+    };
+    if (row && row.id) await pb.update('m23_hedges', row.id, body);
+    else await pb.create('m23_hedges', body);
+  }
+}
+
+// ---- Football Daily result (Daily summary only, Pho) ----------------------
+// Player's settled result, NO 1.5% rebate on player bets. Pho (Nov 15 08:54,
+// CORRECTED): a body bettor who wins 10000 gets 9500 (5% commission only);
+// who loses 10000 loses the full 10000. The 1.5% is ONLY for the hedge
+// (အကန်) — '1.5%က အကန်အတွက်ပဲပြောတာ ၃ခုမတူ' (the three are different).
+// So footballDailyResult returns the settled profit as-is (settleBodyBet /
+// settleParlayBet already apply the 5% body / 15/20/30% parlay commissions;
+// payouts to players are untouched). The 1.5% hedge rebate is a separate
+// hedge calculation, NOT applied here.
+// Hedge rebate rate (Pho, Nov 15 08:20): 1.5% on hedge amounts only.
+export const FOOTBALL_REBATE = 0.015;
+// Daily-summary result for ONE settled football bet (player's view;
+// + = player wins, - = player loses). Returns null when the bet is not
+// fully settled yet (open legs).
+export function footballDailyResult(bet, fixturesById, settings) {
+  const r = settleFbBet(bet, fixturesById, settings);
+  if (!r) return null;
+  return r.profit; // settled profit as-is: body win 9500 / loss -10000, parlay tier-commissioned
+}
+// Sum of the Daily results over settled football bets.
+export function footballDailyTotal(fbBets, fixturesById, settings) {
+  let total = 0;
+  (fbBets || []).forEach(function (b) {
+    const d = footballDailyResult(b, fixturesById, settings);
+    if (d !== null && d !== undefined) total += d;
+  });
+  return total;
+}
+// Daily detail for ONE settled football bet: {gross, net} where gross is the
+// pre-commission result and net is the settled profit (Pho's display format
+// is 'gross (net)', e.g. '+100000 (+95000)' for a bettor win). Returns null
+// when the bet is not fully settled yet.
+export function footballDailyDetail(bet, fixturesById, settings) {
+  const r = settleFbBet(bet, fixturesById, settings);
+  if (!r) return null;
+  const stake = bet.stake || 0;
+  let gross = 0;
+  if (bet.type === 'parlay') {
+    let prod = 1, anyLoss = false;
+    r.legs.forEach(function (l) {
+      if (l.res === 'loss') anyLoss = true;
+      prod *= legFactor(l.res, l.pyar);
+    });
+    gross = anyLoss ? -stake : stake * prod - stake;
+  } else {
+    r.legs.forEach(function (l) {
+      const st = l.stake || 0;
+      if (l.res === 'win') gross += st * (l.pyar || 0) / 100;
+      else if (l.res === 'halfWin') gross += (st / 2) * (l.pyar || 0) / 100;
+      else if (l.res === 'halfLoss') gross -= st / 2;
+      else if (l.res === 'loss') gross -= st;
+    });
+  }
+  return { gross: gross, net: r.profit };
+}
+
+// ---- Hedge 1.5% rebate (Daily summary, hedge profit/loss only — Pho) -------
+// Pho (Nov 15 08:56): the 1.5% goes 'အကန် အမြတ်/အရှုံး ထဲမှာ' (in the hedge
+// profit/loss). A hedge is Pho's own bet with a hedge bookie, settled like a
+// body bettor: the bookie takes 5% on Pho's wins, then gives 1.5% back.
+//   hedge win:  gross x (1 - 0.05 + 0.015) = gross x 0.965
+//   hedge loss: gross x (1 - 0.015)         = gross x 0.985
+// (Pho's exact math: +10000 -> +9650, -10000 -> -9850.) Player bets get NO
+// 1.5% (footballDailyResult above). The hedge odds are stored as a Myanmar
+// string ('2+35', '3-25', '2+5', '3=', '='), so they are parsed back to a
+// line before settling.
+// Parse a Myanmar odds string back to its line value.
+// '2+35' -> 2.35, '3-25' -> -3.25, '2+5' -> 2.5, '3=' -> 3, '=' -> 0,
+// '=+5' -> 0.5, '=-25' -> -0.25. Returns null when unparseable.
+export function myanmarToLine(str) {
+  if (str == null || str === '') return null;
+  const s = String(str).trim();
+  if (s === '=') return 0;
+  const m = s.match(/^(=|\d+)([+\-=])(\d*)$/);
+  if (!m) return null;
+  const goal = m[1] === '=' ? 0 : parseInt(m[1], 10);
+  const sign = m[2];
+  const pyarStr = m[3] || '';
+  if (sign === '=' || !pyarStr) return goal;
+  const frac = parseInt(pyarStr, 10) / Math.pow(10, pyarStr.length);
+  const val = goal + frac;
+  return sign === '-' ? -val : val;
+}
+// Settle ONE hedge against its fixture. Returns {res, pyar, gross} where
+// gross is Pho's pre-rebate profit/loss (+ = Pho wins the hedge), or null
+// when the fixture is not finished, the odds do not parse, or the hedged
+// team cannot be mapped to home/away. `fixturesByApiId` maps api_id -> fixture.
+export function settleHedge(h, fixturesByApiId) {
+  if (!h || !h.fixture) return null;
+  const fx = (fixturesByApiId || {})[h.fixture];
+  if (!fx || fx.status !== 'finished') return null;
+  const hg = fx.home_goals, ag = fx.away_goals;
+  if (hg == null || ag == null) return null;
+  const line = myanmarToLine(h.odds);
+  if (line == null) return null;
+  const amount = h.amount || 0;
+  let leg = null;
+  if (h.kind === 'body') {
+    const homeShort = teamShort(h.home || fx.home);
+    const awayShort = teamShort(h.away || fx.away);
+    let pick = null;
+    if (h.team === homeShort) pick = 'h';
+    else if (h.team === awayShort) pick = 'a';
+    else return null;
+    leg = { kind: 'body', pick: pick, ah_line: line };
+  } else if (h.kind === 'goal') {
+    if (h.side !== 'over' && h.side !== 'under') return null;
+    leg = { kind: 'goal', pick: h.side, gl_line: line };
+  } else {
+    return null;
+  }
+  const r = settleLeg(leg, fx);
+  if (!r) return null;
+  let gross = 0;
+  if (r.res === 'win') gross = amount * (r.pyar || 0) / 100;
+  else if (r.res === 'halfWin') gross = (amount / 2) * (r.pyar || 0) / 100;
+  else if (r.res === 'halfLoss') gross = -amount / 2;
+  else if (r.res === 'loss') gross = -amount;
+  return { res: r.res, pyar: r.pyar || 0, gross: gross };
+}
+// Daily-summary result for ONE hedge (Pho's view; + = Pho wins the hedge).
+// Applies the 1.5% hedge rebate: win x0.965, loss x0.985, push 0.
+// Returns null when the hedge is not settled yet.
+export function hedgeDailyResult(h, fixturesByApiId) {
+  const s = settleHedge(h, fixturesByApiId);
+  if (!s) return null;
+  const g = s.gross;
+  if (g > 0) return Math.round(g * 0.965);
+  if (g < 0) return Math.round(g * 0.985);
+  return 0;
+}
+// Sum of the hedge Daily results over settled hedges.
+export function hedgeDailyTotal(hedges, fixturesByApiId) {
+  let total = 0;
+  (hedges || []).forEach(function (h) {
+    const d = hedgeDailyResult(h, fixturesByApiId);
+    if (d !== null && d !== undefined) total += d;
+  });
+  return total;
 }
 
 // ---- Ledger red state -------------------------------------------------------
