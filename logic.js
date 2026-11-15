@@ -235,6 +235,96 @@ export function buildCloseAt(sessionDate, time) {
   if (d === null) return null;
   return d + ' ' + time + ':00';
 }
+
+// ---- 2D auto-schedule (Admin v2.0, Pho Nov 15 18:31-18:43) -----------------
+// 2D opens Mon-Fri, morning AND evening (2 sessions/day); Sat + Sun CLOSED
+// every week. Mon-Fri the morning session auto-opens 10:00 and the evening
+// 14:00; auto-close is at the Settings close times (am 11:55 / pm 15:55 by
+// default — carried forward from the latest same-period session's close_at).
+// The Admin side ONLY creates today's missing sessions (open=true); the
+// PLAYER gates the effective open state by the clock, and the automation
+// NEVER flips a session from closed back to open, so Pho's manual holiday
+// close (Admin toggle) is never undone. 3D untouched (1st/16th, manual).
+// Football untouched.
+
+// Default close times when no earlier session of the period has a close_at.
+export const TWO_D_CLOSE_DEFAULTS = { am: '11:55', pm: '15:55' };
+
+// isoForYangonDate (v2.0): the PocketBase DateTime value for 00:00 Yangon
+// on `yangonDate` ("YYYY-MM-DD"). Yangon is UTC+6:30, so 00:00 Yangon is
+// 17:30 UTC the PREVIOUS day. Returns an ISO string
+// ("YYYY-MM-DDTHH:MM:SS.000Z"), or null for an invalid date. Verified
+// against real stored rows: "2026-11-15 17:30:00.000Z" = 2026-11-16 Yangon,
+// "2026-11-12 17:30:00.000Z" = 2026-11-13 Yangon.
+export function isoForYangonDate(yangonDate) {
+  if (typeof yangonDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(yangonDate)) return null;
+  const p = yangonDate.split('-').map(Number);
+  const ms = Date.UTC(p[0], p[1] - 1, p[2]) - (6.5 * 3600 * 1000);
+  if (isNaN(ms)) return null;
+  return new Date(ms).toISOString();
+}
+// closeTimeOf: 'HH:MM' out of a stored close_at ('YYYY-MM-DD HH:MM:SS' or
+// ISO), or null. Same regex admin.js timeFromCloseAt uses.
+export function closeTimeOf(closeAt) {
+  if (!closeAt) return null;
+  const m = String(closeAt).match(/(\d{2}):(\d{2})/);
+  return m ? m[1] + ':' + m[2] : null;
+}
+// carriedCloseTime: the HH:MM for a new 2D session of `period` — taken from
+// the LATEST existing 2D session of the same period that HAS a close_at
+// (latest by stored date), else the default 11:55 (am) / 15:55 (pm).
+export function carriedCloseTime(sessions, period) {
+  const def = TWO_D_CLOSE_DEFAULTS[period] || TWO_D_CLOSE_DEFAULTS.am;
+  let latest = null;
+  (sessions || []).forEach(function (s) {
+    if (s.game !== '2d' || s.period !== period) return;
+    if (!closeTimeOf(s.close_at)) return;
+    if (!latest || String(s.date).localeCompare(String(latest.date)) > 0) latest = s;
+  });
+  return latest ? closeTimeOf(latest.close_at) : def;
+}
+// missing2DPeriods: which 2D periods still need a session created for
+// `yangonDate` ("YYYY-MM-DD", Yangon). Sat (6) / Sun (0) -> [] (weekend
+// closed). Otherwise ['am','pm'] minus periods that already have a 2D
+// session whose Yangon date (via yangonDateOf) equals yangonDate. 3D
+// sessions and other games never count, and an existing row counts whether
+// it is open or closed — creation only, never re-opening.
+export function missing2DPeriods(yangonDate, sessions) {
+  if (typeof yangonDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(yangonDate)) return [];
+  const p = yangonDate.split('-').map(Number);
+  const weekday = new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay();
+  if (weekday === 0 || weekday === 6) return [];
+  const have = {};
+  (sessions || []).forEach(function (s) {
+    if (s.game !== '2d') return;
+    if (yangonDateOf(s.date) === yangonDate) have[s.period] = true;
+  });
+  const missing = [];
+  if (!have.am) missing.push('am');
+  if (!have.pm) missing.push('pm');
+  return missing;
+}
+// ensureToday2DSessions: create today's missing 2D sessions via `pb`
+// (pb.js or a fake in tests). `sessions` is the current m23_sessions list,
+// `yangonDate` is today's Yangon date ("YYYY-MM-DD"). Returns the created
+// rows (open=true, close_at carried forward, date = Yangon midnight). On
+// Sat/Sun, or when nothing is missing, creates nothing. Never touches 3D
+// or any other game; never re-opens a manually closed session.
+export async function ensureToday2DSessions(pb, sessions, yangonDate) {
+  const missing = missing2DPeriods(yangonDate, sessions);
+  const created = [];
+  const dateIso = isoForYangonDate(yangonDate);
+  if (!dateIso) return created;
+  for (let i = 0; i < missing.length; i++) {
+    const period = missing[i];
+    const closeAt = buildCloseAt(dateIso, carriedCloseTime(sessions, period));
+    const row = await pb.create('m23_sessions', {
+      game: '2d', period: period, date: dateIso, open: true, close_at: closeAt
+    });
+    created.push(row);
+  }
+  return created;
+}
 // Passed = kickoff time reached (kickoff_utc*1000 <= now). nowMs defaults
 // to Date.now(); tests pass an explicit now. Unknown kickoff is NOT passed
 // (old behaviour: hedgeable). NOTE: plain kickoff-passed only — the
