@@ -135,14 +135,18 @@ export function netSide(x, y, xName, yName) {
 // Net per match from m23_bets_fb legs of BODY placements only (parlay legs
 // span matches, so they never net — they stay individual bets).
 // A leg: { fixture, home, away, kind:'body'|'goal', pick:'h'|'a'|'over'|'under', stake }
-export function computeBodyNet(fbBets) {
+// fixturesById (optional): map fixture PB id -> fixture row; when given,
+// each entry carries its kickoff_utc and the list is sorted by kickoff
+// (earliest first, unknown kickoff last) — Admin v1.7 (Pho Nov 15: the
+// ledger must show match time in time order so a passed match is obvious).
+export function computeBodyNet(fbBets, fixturesById) {
   const byKey = {};
   (fbBets || []).forEach(function (b) {
     if (b.type !== 'body') return;
     (b.legs || []).forEach(function (leg) {
       const key = leg.fixture || (leg.home + ' vs ' + leg.away);
       if (!byKey[key]) {
-        byKey[key] = { key: key, home: leg.home || '', away: leg.away || '', h: 0, a: 0, over: 0, under: 0, bodyOdds: '', goalOdds: '' };
+        byKey[key] = { key: key, home: leg.home || '', away: leg.away || '', h: 0, a: 0, over: 0, under: 0, bodyOdds: '', goalOdds: '', kickoff_utc: null };
       }
       const m = byKey[key];
       if (leg.kind === 'body') {
@@ -159,7 +163,85 @@ export function computeBodyNet(fbBets) {
       }
     });
   });
-  return Object.keys(byKey).map(function (k) { return byKey[k]; });
+  const list = Object.keys(byKey).map(function (k) { return byKey[k]; });
+  if (fixturesById) {
+    list.forEach(function (m) {
+      const fx = fixturesById[m.key];
+      if (fx && typeof fx.kickoff_utc === 'number') m.kickoff_utc = fx.kickoff_utc;
+    });
+  }
+  return sortBodyNetByKickoff(list);
+}
+
+// Sort body-ledger matches by kickoff ascending; matches with no known
+// kickoff go last, keeping their current relative order (stable).
+export function sortBodyNetByKickoff(matches) {
+  return (matches || []).map(function (m, i) { return { m: m, i: i }; }).sort(function (a, b) {
+    const ka = a.m.kickoff_utc, kb = b.m.kickoff_utc;
+    const aKnown = typeof ka === 'number', bKnown = typeof kb === 'number';
+    if (aKnown && bKnown) return (ka - kb) || (a.i - b.i);
+    if (aKnown) return -1;
+    if (bKnown) return 1;
+    return a.i - b.i;
+  }).map(function (x) { return x.m; });
+}
+
+// ---- Match kickoff time (Admin v1.7) ----------------------------------------
+// kickoff_utc is unix seconds UTC; the ledger shows Yangon HH:MM.
+const YGN_TIME_FMT = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Yangon', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+export function formatKickoffYangon(kickoffUtc) {
+  if (kickoffUtc === null || kickoffUtc === undefined || typeof kickoffUtc !== 'number' || !isFinite(kickoffUtc)) return null;
+  try { return YGN_TIME_FMT.format(new Date(kickoffUtc * 1000)); } catch (e) { return null; }
+}
+// Passed = kickoff time reached (kickoff_utc*1000 <= now). nowMs defaults
+// to Date.now(); tests pass an explicit now. Unknown kickoff is NOT passed
+// (old behaviour: hedgeable). NOTE: plain kickoff-passed only — the
+// 5-minute auto-close rule lives in the PLAYER app, NOT here.
+export function isKickoffPassed(kickoffUtc, nowMs) {
+  if (kickoffUtc === null || kickoffUtc === undefined || typeof kickoffUtc !== 'number') return false;
+  const now = (nowMs === undefined || nowMs === null) ? Date.now() : nowMs;
+  return kickoffUtc * 1000 <= now;
+}
+// Whether a hedge may still be placed/edited on a ledger match.
+export function canHedgeMatch(m, nowMs) {
+  if (!m) return false;
+  return !isKickoffPassed(m.kickoff_utc, nowMs);
+}
+// Yangon HH:MM for one leg's fixture, or '' when the fixture/kickoff is unknown.
+export function legKickoffTime(leg, fixturesById) {
+  if (!leg || !fixturesById) return '';
+  const fx = fixturesById[leg.fixture];
+  if (!fx) return '';
+  return formatKickoffYangon(fx.kickoff_utc) || '';
+}
+// Earliest kickoff (unix seconds) across a parlay bet's legs, or null when
+// no leg has a known kickoff. Used to sort the parlay list by time.
+export function parlayEarliestKickoff(bet, fixturesById) {
+  let earliest = null;
+  ((bet && bet.legs) || []).forEach(function (leg) {
+    if (!fixturesById) return;
+    const fx = fixturesById[leg.fixture];
+    if (fx && typeof fx.kickoff_utc === 'number') {
+      if (earliest === null || fx.kickoff_utc < earliest) earliest = fx.kickoff_utc;
+    }
+  });
+  return earliest;
+}
+// Sort parlay list entries ({ n, v, bet }) by earliest leg kickoff
+// ascending; bets with no known kickoff go last. Ties keep amount-first
+// (v desc, then name asc) so the old biggest-first order survives when
+// times are equal or unknown.
+export function sortParlayEntriesByKickoff(entries, fixturesById) {
+  return (entries || []).map(function (e, i) {
+    return { e: e, i: i, ko: parlayEarliestKickoff(e.bet, fixturesById) };
+  }).sort(function (a, b) {
+    const aKnown = a.ko !== null, bKnown = b.ko !== null;
+    if (aKnown && bKnown) {
+      if (a.ko !== b.ko) return a.ko - b.ko;
+    } else if (aKnown) return -1;
+    else if (bKnown) return 1;
+    return (b.e.v - a.e.v) || (a.e.n < b.e.n ? -1 : a.e.n > b.e.n ? 1 : 0) || (a.i - b.i);
+  }).map(function (x) { return x.e; });
 }
 
 // ---- Body-ledger nets + hedges (Admin v1.6) --------------------------------
