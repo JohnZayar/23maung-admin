@@ -209,6 +209,32 @@ export function formatKickoffYangon(kickoffUtc) {
   if (ko === null) return null;
   try { return YGN_TIME_FMT.format(new Date(ko * 1000)); } catch (e) { return null; }
 }
+// yangonDateOf (v1.9): the Yangon calendar date (YYYY-MM-DD) of a
+// PocketBase DateTime value. m23_sessions.date is returned as a raw ISO
+// datetime string ("2026-11-15 17:30:00.000Z" = 2026-11-16 00:00 Yangon),
+// so the date part of the string is NOT the Yangon date. Accepts an ISO
+// string or unix seconds (via normalizeKickoff); anything else -> null.
+const YGN_DATE_FMT = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon', year: 'numeric', month: '2-digit', day: '2-digit' });
+export function yangonDateOf(value) {
+  const ko = normalizeKickoff(value);
+  if (ko === null) return null;
+  try { return YGN_DATE_FMT.format(new Date(ko * 1000)); } catch (e) { return null; }
+}
+// buildCloseAt (v1.9): the close_at value to store for a session whose
+// date is `sessionDate` (ISO string or unix seconds) and whose picked
+// close time is `time` ("HH:MM" from the Settings time input). Returns
+// "YYYY-MM-DD HH:MM:00" (space format — PocketBase stores it as a
+// DateTime and timeFromCloseAt extracts the same HH:MM back), or null
+// when the date is missing/invalid or the time is not HH:MM. Never
+// builds the old malformed form (raw ISO date + time, which PocketBase
+// rejected with 400, so nothing was ever stored and the inputs always
+// fell back to the 16:00 HTML default).
+export function buildCloseAt(sessionDate, time) {
+  if (typeof time !== 'string' || !/^\d{2}:\d{2}$/.test(time)) return null;
+  const d = yangonDateOf(sessionDate);
+  if (d === null) return null;
+  return d + ' ' + time + ':00';
+}
 // Passed = kickoff time reached (kickoff_utc*1000 <= now). nowMs defaults
 // to Date.now(); tests pass an explicit now. Unknown kickoff is NOT passed
 // (old behaviour: hedgeable). NOTE: plain kickoff-passed only — the
