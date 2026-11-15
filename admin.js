@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=1.6';
+import * as L from './logic.js?v=1.7';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -200,7 +200,7 @@ function recomputeFromLive() {
       return { n: playerName(b.player) + ' — မောင်း ' + (b.legs || []).length + ' ပွဲ', v: b.stake || 0, bet: b };
     }))
   };
-  BODY_NET = L.computeBodyNet(state.betsFb);
+  BODY_NET = L.computeBodyNet(state.betsFb, fxById());
   state.hedgeByMatch = L.indexHedgesByMatch(state.hedges, state.fixtures);
   const pend = state.requests.filter(function (r) { return r.status === 'pending'; });
   pendIn = pend.filter(function (r) { return r.kind === 'topup'; }).length;
@@ -252,6 +252,12 @@ function fixtureById(id) {
   if (!id) return null;
   return state.fixtures.find(function (f) { return f.id === id; }) || null;
 }
+// Map fixture PB id -> fixture row (kickoff lookups for ledger times).
+function fxById() {
+  const map = {};
+  state.fixtures.forEach(function (f) { map[f.id] = f; });
+  return map;
+}
 function teamName(l, which) {
   const fx = fixtureById(l.fixture);
   if (fx) {
@@ -261,7 +267,10 @@ function teamName(l, which) {
   return which === 'h' ? (l.home || '') : (l.away || '');
 }
 // One leg as plain text: match + pick + odds + leg outcome.
-function legLine(l) {
+// withTime (v1.7, parlay tab only): appends the leg's kickoff time
+// (Yangon HH:MM) after the match part, e.g. 'Man City 1-25 vs Fulham ·
+// 21:00 · စောင့်'. Default off — all other callers render byte-identical.
+function legLine(l, withTime, fixturesById) {
   const h = teamName(l, 'h'), a = teamName(l, 'a');
   let s;
   if (l.kind === 'goal') {
@@ -271,17 +280,24 @@ function legLine(l) {
   } else {
     s = h + ' vs ' + a + (l.hcp ? ' ' + l.hcp : '');
   }
+  if (withTime) {
+    const t = L.legKickoffTime(l, fixturesById);
+    if (t) s += ' · ' + t;
+  }
   return s + ' · ' + resText(l.res);
 }
 // Status badge line (with payout when settled) + one .fb-leg per leg.
-function fbDetailHtml(b) {
+// withTime: append each leg's kickoff time (fixturesById map passed by the
+// caller; defaults to the live state.fixtures when omitted).
+function fbDetailHtml(b, withTime, fixturesById) {
   if (!b) return '';
   const txt = betStatusText(b) +
     ((b.status === 'won' || b.status === 'settled') && b.payout
       ? ' · ရငွေ ' + fmt(b.payout) : '');
   let out = '<div class="fb-leg"><span class="badge ' + betStatusClass(b) + '">' + esc(txt) + '</span></div>';
+  const fxMap = withTime ? (fixturesById || fxById()) : null;
   (b.legs || []).forEach(function (l) {
-    out += '<div class="fb-leg">' + esc(legLine(l)) + '</div>';
+    out += '<div class="fb-leg">' + esc(legLine(l, withTime, fxMap)) + '</div>';
   });
   return out;
 }
@@ -652,12 +668,17 @@ function netSide(x, y, xName, yName) { return L.netSide(x, y, xName, yName); }
 // with odds header, amounts, red post-hedge net line and a gold hedge line.
 // TAP a card -> hedge bottom sheet. No summary totals on this screen.
 function amtCell(v) { return '<span class="' + (v ? '' : 'zero') + '">' + fmt(v || 0) + '</span>'; }
+// Tap a passed match's card: no hedge sheet — the time has passed.
+function toastKickoffPassed() { toast('ပွဲချိန် ကျော်သွားပြီ'); }
 function renderBsBody() {
   var w = $('bsList');
   if (!w) return;
+  // Time order (earliest first, unknown last); BODY_NET is the same array
+  // openHedgeSheet indexes into, so sort it in place, not a copy.
+  BODY_NET = L.sortBodyNetByKickoff(BODY_NET);
   var out = '';
   out += '<div class="ld-legend">⬆️ = ဂိုးပေါ် · ⬇️ = ဂိုးအောက် · {} = အကျန်</div>';
-  out += '<div class="muted" style="margin:4px 0 8px">အကန် ထည့်ရန် / ပြင်ရန် ပွဲကို ဖိပါ</div>';
+  out += '<div class="muted" style="margin:4px 0 8px">အကန် ထည့်ရန် / ပြင်ရန် ပွဲကို ဖိပါ · အချိန်အစဉ်လိုက်</div>';
   BODY_NET.forEach(function (m, idx) {
     var hedges = state.hedgeByMatch[m.key] || {};
     var bn = L.bodyNetOf(m), gn = L.goalNetOf(m);
@@ -669,8 +690,15 @@ function renderBsBody() {
     var hl = [];
     if (hedges.body) hl.push(L.hedgeLineText(hedges.body));
     if (hedges.goal) hl.push(L.hedgeLineText(hedges.goal));
-    out += '<div class="ld-card" tabindex="0" role="button" onclick="openHedgeSheet(' + idx + ')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openHedgeSheet(' + idx + ');}">';
-    out += '<div class="ld-head">' + esc(L.ledgerHeaderText(m)) + '</div>';
+    // Kickoff time (Yangon HH:MM) next to the header; a passed match is
+    // muted and its tap only toasts — no hedge sheet, no save (v1.7).
+    var passed = !L.canHedgeMatch(m);
+    var koTime = L.formatKickoffYangon(m.kickoff_utc);
+    var timeHtml = koTime ? '<span class="ld-time' + (passed ? ' passed' : '') + '">' + koTime + (passed ? ' · ပိတ်ပြီ' : '') + '</span>' : '';
+    var cardCls = passed ? 'ld-card ld-passed' : 'ld-card';
+    var tap = passed ? 'toastKickoffPassed()' : 'openHedgeSheet(' + idx + ')';
+    out += '<div class="' + cardCls + '" tabindex="0" role="button" onclick="' + tap + '" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();' + tap + ';}">';
+    out += '<div class="ld-head"><span>' + esc(L.ledgerHeaderText(m)) + '</span>' + timeHtml + '</div>';
     out += '<div class="ld-amt">' + amtCell(m.h) + amtCell(m.a) + '<span class="' + (m.over ? '' : 'zero') + '">⬆️' + fmt(m.over || 0) + '</span></div>';
     out += '<div class="ld-under"><span class="' + (m.under ? '' : 'zero') + '">⬇️' + fmt(m.under || 0) + '</span></div>';
     out += '<div class="ld-net"><span>အကျန်</span><span>' + esc(bTxt) + ' ' + esc(gTxt) + '</span></div>';
@@ -697,13 +725,17 @@ function renderBs() {
   var w = $('bsList');
   if (!w) return;
   if (bsTab === 'body') { renderBsBody(); return; }
-  var list = L.sortBsDesc(BS[bsTab] || []);
+  // Parlay (v1.7): earliest leg kickoff first, unknown last; each leg
+  // shows its kickoff time. 2D/3D stay biggest-first, untouched.
+  var list = bsTab === 'parlay'
+    ? L.sortParlayEntriesByKickoff(BS['parlay'] || [], fxById())
+    : L.sortBsDesc(BS[bsTab] || []);
   var out = '';
   list.forEach(function (e, i) {
     var row = '<div class="bs-row"><span><span class="rank">' + (i + 1) + '.</span> <span class="num">' + esc(e.n) + ' = ' + e.v + '</span></span></div>';
     if (bsTab === 'parlay' && e.bet) {
-      // Parlay: one line per leg (match, pick, odds, outcome) + status.
-      out += '<div class="fb-bet">' + row + fbDetailHtml(e.bet) + '</div>';
+      // Parlay: one line per leg (match, pick, odds, kickoff time, outcome) + status.
+      out += '<div class="fb-bet">' + row + fbDetailHtml(e.bet, true, fxById()) + '</div>';
     } else {
       out += row;
     }
@@ -712,13 +744,16 @@ function renderBs() {
 }
 function bsText() {
   if (bsTab === 'body') return bsBodyText();
-  var list = L.sortBsDesc(BS[bsTab] || []);
+  var list = bsTab === 'parlay'
+    ? L.sortParlayEntriesByKickoff(BS['parlay'] || [], fxById())
+    : L.sortBsDesc(BS[bsTab] || []);
   var lines = [BS_LABEL[bsTab]];
+  var fxMap = bsTab === 'parlay' ? fxById() : null;
   list.forEach(function (e, i) {
     lines.push((i + 1) + '. ' + e.n + ' = ' + e.v);
     if (bsTab === 'parlay' && e.bet) {
       lines.push('   ' + betStatusText(e.bet) + (((e.bet.status === 'won' || e.bet.status === 'settled') && e.bet.payout) ? ' · ရငွေ ' + e.bet.payout : ''));
-      (e.bet.legs || []).forEach(function (l) { lines.push('   ' + legLine(l)); });
+      (e.bet.legs || []).forEach(function (l) { lines.push('   ' + legLine(l, true, fxMap)); });
     }
   });
   return lines.join('\n');
@@ -797,6 +832,9 @@ function hedgeSheetRow(kind, label, net, draftAmt, draftBookie) {
 function openHedgeSheet(idx) {
   var m = BODY_NET[idx];
   if (!m) return;
+  // v1.7: a passed match cannot be hedged (plain kickoff rule, no 5-min
+  // window — that lives in the Player app).
+  if (!L.canHedgeMatch(m)) { toast('ပွဲချိန် ကျော်သွားပြီ'); return; }
   var bn = L.bodyNetOf(m), gn = L.goalNetOf(m);
   var existing = state.hedgeByMatch[m.key] || { body: null, goal: null };
   hedgeCtx = { idx: idx, m: m, bn: bn, gn: gn, existing: existing };
@@ -850,6 +888,9 @@ function updateHedgeRemain(kind) {
 }
 async function saveHedgeSheet() {
   if (!hedgeCtx) return;
+  // v1.7: refuse to save a hedge for a match whose kickoff has passed
+  // (the sheet could have been open across kickoff).
+  if (!L.canHedgeMatch(hedgeCtx.m)) { toast('ပွဲချိန် ကျော်သွားပြီ'); return; }
   var m = hedgeCtx.m;
   var fx = fixtureById(m.key);
   var drafts = { body: null, goal: null };
@@ -1206,6 +1247,7 @@ window.openFbSum = openFbSum;
 window.renderFbSum = renderFbSum;
 window.copyFbSum = copyFbSum;
 window.openHedgeSheet = openHedgeSheet;
+window.toastKickoffPassed = toastKickoffPassed;
 window.closeHedgeSheet = closeHedgeSheet;
 window.hedgeAllIn = hedgeAllIn;
 window.updateHedgeRemain = updateHedgeRemain;
