@@ -167,7 +167,7 @@ export function computeBodyNet(fbBets, fixturesById) {
   if (fixturesById) {
     list.forEach(function (m) {
       const fx = fixturesById[m.key];
-      if (fx && typeof fx.kickoff_utc === 'number') m.kickoff_utc = fx.kickoff_utc;
+      if (fx) { const ko = normalizeKickoff(fx.kickoff_utc); if (ko !== null) m.kickoff_utc = ko; }
     });
   }
   return sortBodyNetByKickoff(list);
@@ -186,21 +186,38 @@ export function sortBodyNetByKickoff(matches) {
   }).map(function (x) { return x.m; });
 }
 
-// ---- Match kickoff time (Admin v1.7) ----------------------------------------
-// kickoff_utc is unix seconds UTC; the ledger shows Yangon HH:MM.
+// ---- Match kickoff time (Admin v1.7, type fix v1.8) ---------------------------
+// normalizeKickoff (v1.8): m23_fixtures.kickoff_utc is a PocketBase
+// DateTime field, so the API returns it as an ISO datetime STRING
+// ("2026-11-21 20:00:00.000Z"), NOT a unix-seconds number. Accept BOTH:
+// a finite number is unix seconds (used as-is); a string is parsed with
+// Date.parse() and converted to whole unix seconds. Anything else -> null.
+export function normalizeKickoff(value) {
+  if (typeof value === 'number' && isFinite(value)) return Math.floor(value);
+  if (typeof value === 'string') {
+    const ms = Date.parse(value);
+    if (!isNaN(ms)) return Math.floor(ms / 1000);
+    return null;
+  }
+  return null;
+}
+// kickoff_utc is unix seconds UTC (or an ISO datetime string — see
+// normalizeKickoff); the ledger shows Yangon HH:MM.
 const YGN_TIME_FMT = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Yangon', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 export function formatKickoffYangon(kickoffUtc) {
-  if (kickoffUtc === null || kickoffUtc === undefined || typeof kickoffUtc !== 'number' || !isFinite(kickoffUtc)) return null;
-  try { return YGN_TIME_FMT.format(new Date(kickoffUtc * 1000)); } catch (e) { return null; }
+  const ko = normalizeKickoff(kickoffUtc);
+  if (ko === null) return null;
+  try { return YGN_TIME_FMT.format(new Date(ko * 1000)); } catch (e) { return null; }
 }
 // Passed = kickoff time reached (kickoff_utc*1000 <= now). nowMs defaults
 // to Date.now(); tests pass an explicit now. Unknown kickoff is NOT passed
 // (old behaviour: hedgeable). NOTE: plain kickoff-passed only — the
 // 5-minute auto-close rule lives in the PLAYER app, NOT here.
 export function isKickoffPassed(kickoffUtc, nowMs) {
-  if (kickoffUtc === null || kickoffUtc === undefined || typeof kickoffUtc !== 'number') return false;
+  const ko = normalizeKickoff(kickoffUtc);
+  if (ko === null) return false;
   const now = (nowMs === undefined || nowMs === null) ? Date.now() : nowMs;
-  return kickoffUtc * 1000 <= now;
+  return ko * 1000 <= now;
 }
 // Whether a hedge may still be placed/edited on a ledger match.
 export function canHedgeMatch(m, nowMs) {
@@ -221,8 +238,9 @@ export function parlayEarliestKickoff(bet, fixturesById) {
   ((bet && bet.legs) || []).forEach(function (leg) {
     if (!fixturesById) return;
     const fx = fixturesById[leg.fixture];
-    if (fx && typeof fx.kickoff_utc === 'number') {
-      if (earliest === null || fx.kickoff_utc < earliest) earliest = fx.kickoff_utc;
+    if (fx) {
+      const ko = normalizeKickoff(fx.kickoff_utc);
+      if (ko !== null && (earliest === null || ko < earliest)) earliest = ko;
     }
   });
   return earliest;
