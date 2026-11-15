@@ -116,7 +116,11 @@
   .ld-legend { font-size: 11px; color: #64748b; margin-bottom: 2px; }
   .ld-card { border: 1px solid #e8eef5; border-radius: 12px; padding: 10px 12px; margin-bottom: 9px; background: #fff; box-shadow: 0 1px 5px rgba(30,58,95,.05); cursor: pointer; }
   .ld-card:focus { outline: 2px solid #1e3a5f; outline-offset: 1px; }
-  .ld-head { font-weight: bold; font-size: 14px; margin-bottom: 4px; }
+  .ld-card.ld-passed { opacity: .55; }
+  .ld-head { font-weight: bold; font-size: 14px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .ld-head > span:first-child { min-width: 0; }
+  .ld-time { font-size: 12px; color: #1e3a5f; white-space: nowrap; flex-shrink: 0; }
+  .ld-time.passed { color: #b91c1c; }
   .ld-amt { display: flex; justify-content: space-between; font-size: 13px; padding: 2px 0; font-family: monospace; }
   .ld-under { text-align: right; font-size: 13px; padding: 2px 0; font-family: monospace; }
   .ld-net { display: flex; justify-content: space-between; font-weight: bold; color: #b91c1c; font-size: 14px; padding-top: 5px; border-top: 1px dashed #e2e8f0; margin-top: 4px; }
@@ -160,7 +164,7 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v1.6</span></div>
+<div class="topbar"><h1><img src="logo.png" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v1.7</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
@@ -439,6 +443,6 @@
   <datalist id="bookieList"></datalist>
 </div>
 
-<script type="module" src="admin.js?v=1.6"></script>
+<script type="module" src="admin.js?v=1.7"></script>
 </body>
 </html>
