@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=1.8';
+import * as L from './logic.js?v=1.9';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -1111,6 +1111,21 @@ function timeFromCloseAt(closeAt) {
   const m = String(closeAt).match(/(\d{2}):(\d{2})/);
   return m ? m[1] + ':' + m[2] : null;
 }
+// saveCloseAt (v1.9): write one session's close_at from its picked time.
+// Skips silently when there is no session, no time, or the session date
+// cannot be parsed (buildCloseAt returns null). A failed write toasts but
+// never throws, so it cannot abort the other close_at writes or the
+// settings save.
+async function saveCloseAt(session, time) {
+  if (!session || !time) return;
+  const closeAt = L.buildCloseAt(session.date, time);
+  if (!closeAt) return;
+  try {
+    await PB.update('m23_sessions', session.id, { close_at: closeAt });
+  } catch (e) {
+    toast('ပိတ်ချိန် သိမ်းလို့ မရဘူး — ' + (e.message || 'error'));
+  }
+}
 function renderHomeSessions() {
   if (!state.loaded) return;
   // Toggles show the latest session per game; the football row has no
@@ -1200,13 +1215,17 @@ async function saveSettings() {
       state.settingsId = state.settings.id;
     }
     // Close times -> close_at on the latest matching sessions (display only).
+    // v1.9: each write is independent (saveCloseAt) — the old code glued the
+    // raw ISO session date to the time ("2026-11-15 17:30:00.000Z 12:00:00"),
+    // which PocketBase rejected (400), so the first failed write aborted the
+    // rest and nothing was ever stored.
     const closeAm = $('close2dAm').value, closePm = $('close2dPm').value, close3d = $('close3d').value;
     const sAm = latestSession('2d', 'am');
     const sPm = latestSession('2d', 'pm');
     const s3 = latestSession('3d', 'round');
-    if (sAm && closeAm) await PB.update('m23_sessions', sAm.id, { close_at: sAm.date + ' ' + closeAm + ':00' });
-    if (sPm && closePm) await PB.update('m23_sessions', sPm.id, { close_at: sPm.date + ' ' + closePm + ':00' });
-    if (s3 && close3d) await PB.update('m23_sessions', s3.id, { close_at: s3.date + ' ' + close3d + ':00' });
+    await saveCloseAt(sAm, closeAm);
+    await saveCloseAt(sPm, closePm);
+    await saveCloseAt(s3, close3d);
     toast('သတ်မှတ်ချက် သိမ်းပြီ');
   } catch (e) {
     toast('သိမ်းလို့ မရဘူး — ' + (e.message || 'error'));
