@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js';
+import * as L from './logic.js?v=1.6';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -17,7 +17,9 @@ const state = {
   players: [],         // m23_players
   bets2d: [], bets3d: [], betsFb: [],
   fixtures: [],        // m23_fixtures
-  txs: []              // m23_wallet_tx (summary only)
+  txs: [],             // m23_wallet_tx (summary only)
+  hedges: [],          // m23_hedges (Admin v1.6)
+  hedgeByMatch: {}     // match key -> {body, goal} hedge rows
 };
 
 // Mockup sample data (kept as the pre-login / offline fallback).
@@ -163,6 +165,10 @@ async function loadAll(quiet) {
     state.betsFb = await PB.getAll('m23_bets_fb', { sort: '-created' });
     state.fixtures = await PB.getAll('m23_fixtures', { sort: '-kickoff_utc' });
     state.txs = await PB.getAll('m23_wallet_tx', { sort: '-created', perPage: 200 });
+    // Hedges (v1.6): own try/catch — a missing m23_hedges collection must
+    // not break the whole load (until it exists, there are simply no hedges).
+    try { state.hedges = await PB.getAll('m23_hedges', { sort: '-created' }); }
+    catch (e2) { state.hedges = []; }
     state.loaded = true;
     recomputeFromLive();
     renderAll();
@@ -195,6 +201,7 @@ function recomputeFromLive() {
     }))
   };
   BODY_NET = L.computeBodyNet(state.betsFb);
+  state.hedgeByMatch = L.indexHedgesByMatch(state.hedges, state.fixtures);
   const pend = state.requests.filter(function (r) { return r.status === 'pending'; });
   pendIn = pend.filter(function (r) { return r.kind === 'topup'; }).length;
   pendOut = pend.filter(function (r) { return r.kind === 'withdraw'; }).length;
@@ -640,43 +647,44 @@ function renderLedgerFb() {
 
 // ---------------------------------------------------------------- big/small
 function netSide(x, y, xName, yName) { return L.netSide(x, y, xName, yName); }
+// ---------------------------------------------------------------- body ledger (v1.6)
+// Ledger-format body list (Pho, approved mockup Nov 15): per-match card
+// with odds header, amounts, red post-hedge net line and a gold hedge line.
+// TAP a card -> hedge bottom sheet. No summary totals on this screen.
+function amtCell(v) { return '<span class="' + (v ? '' : 'zero') + '">' + fmt(v || 0) + '</span>'; }
 function renderBsBody() {
   var w = $('bsList');
   if (!w) return;
-  // Group live body bets by match (same key as computeBodyNet) so each
-  // bet's pick + goal-total pick + outcome shows under its match net.
-  var bodyByKey = {};
-  state.betsFb.forEach(function (b) {
-    if (b.type !== 'body') return;
-    var l0 = (b.legs || [])[0]; if (!l0) return;
-    var k = l0.fixture || (l0.home + ' vs ' + l0.away);
-    (bodyByKey[k] = bodyByKey[k] || []).push(b);
-  });
   var out = '';
-  BODY_NET.forEach(function (m) {
-    var bn = netSide(m.h, m.a, m.home, m.away);
-    var gn = netSide(m.over, m.under, 'ဂိုးပေါ်', 'အောက်');
-    out += '<div class="net-match"><div class="nm-head">' + esc(m.home) + ' vs ' + esc(m.away) + '</div>';
-    out += '<div class="net-row"><span>ဘော်ဒီ</span><span><b>' + esc(m.home) + ' ' + m.h + '</b> · <b>' + esc(m.away) + ' ' + m.a + '</b></span></div>';
-    out += '<div class="net-row"><span>ဂိုးပေါင်း</span><span><b>ဂိုးပေါ် ' + m.over + '</b> · <b>အောက် ' + m.under + '</b></span></div>';
-    out += '<div class="net-res">အကျန်: ' + esc(bn.side) + (bn.amt ? ' ' + bn.amt : '') + ' · ' + esc(gn.side) + (gn.amt ? ' ' + gn.amt : '') + '</div>';
-    (bodyByKey[m.key] || []).forEach(function (b) {
-      out += '<div class="fb-leg"><b>' + esc(playerName(b.player)) + '</b> · ' + fmt(b.stake || 0) + ' ကျပ်</div>' + fbDetailHtml(b);
-    });
+  out += '<div class="ld-legend">⬆️ = ဂိုးပေါ် · ⬇️ = ဂိုးအောက် · {} = အကျန်</div>';
+  out += '<div class="muted" style="margin:4px 0 8px">အကန် ထည့်ရန် / ပြင်ရန် ပွဲကို ဖိပါ</div>';
+  BODY_NET.forEach(function (m, idx) {
+    var hedges = state.hedgeByMatch[m.key] || {};
+    var bn = L.bodyNetOf(m), gn = L.goalNetOf(m);
+    var bRem = L.remainingAfterHedge(bn.net, hedges.body ? hedges.body.amount : 0);
+    var gRem = L.remainingAfterHedge(gn.net, hedges.goal ? hedges.goal.amount : 0);
+    var bSide = bn.side === 'h' ? L.teamShort(m.home) : bn.side === 'a' ? L.teamShort(m.away) : '';
+    var bTxt = bRem === 0 ? 'မျှ' : bSide + ' ' + fmt(bRem);
+    var gTxt = gRem === 0 ? 'မျှ' : '{' + (gn.side === 'over' ? '⬆️' : '⬇️') + fmt(gRem) + '}';
+    var hl = [];
+    if (hedges.body) hl.push(L.hedgeLineText(hedges.body));
+    if (hedges.goal) hl.push(L.hedgeLineText(hedges.goal));
+    out += '<div class="ld-card" tabindex="0" role="button" onclick="openHedgeSheet(' + idx + ')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openHedgeSheet(' + idx + ');}">';
+    out += '<div class="ld-head">' + esc(L.ledgerHeaderText(m)) + '</div>';
+    out += '<div class="ld-amt">' + amtCell(m.h) + amtCell(m.a) + '<span class="' + (m.over ? '' : 'zero') + '">⬆️' + fmt(m.over || 0) + '</span></div>';
+    out += '<div class="ld-under"><span class="' + (m.under ? '' : 'zero') + '">⬇️' + fmt(m.under || 0) + '</span></div>';
+    out += '<div class="ld-net"><span>အကျန်</span><span>' + esc(bTxt) + ' ' + esc(gTxt) + '</span></div>';
+    if (hl.length) out += '<div class="m-hedged">' + esc(hl.join(' · ')) + '</div>';
     out += '</div>';
   });
-  w.innerHTML = out || '<div class="muted">ဘော်ဒီ လောင်းကစား မရှိသေးဘူး</div>';
+  if (!BODY_NET.length) out += '<div class="muted">ဘော်ဒီ လောင်းကစား မရှိသေးဘူး</div>';
+  out += '<button class="btn-block" onclick="openFbSum()" style="margin-top:10px">စာရင်းချုပ် ›</button>';
+  w.innerHTML = out;
 }
 function bsBodyText() {
-  var lines = ['ဘော်ဒီစာရင်း'];
-  BODY_NET.forEach(function (m) {
-    var bn = netSide(m.h, m.a, m.home, m.away);
-    var gn = netSide(m.over, m.under, 'ဂိုးပေါ်', 'အောက်');
-    lines.push(m.home + ' vs ' + m.away);
-    lines.push(m.home + ' ' + m.h + ' - ' + m.away + ' ' + m.a + ' = ' + bn.side + (bn.amt ? ' ' + bn.amt : ''));
-    lines.push('ဂိုးပေါ် ' + m.over + ' - အောက် ' + m.under + ' = ' + gn.side + (gn.amt ? ' ' + gn.amt : ''));
-  });
-  return lines.join('\n');
+  // Ledger copy-all: per-match ledger format with post-hedge nets and
+  // per-match အကန် lines appended (2D/3D 'N = V' tabs untouched).
+  return L.ledgerCopyText(BODY_NET, state.hedgeByMatch);
 }
 var BS_LABEL = { '2d': '2D ကြီးငယ်စာရင်း', '3d': '3D ကြီးငယ်စာရင်း', 'body': 'ဘော်ဒီစာရင်း', 'parlay': 'မောင်းစာရင်း' };
 var bsTab = '2d';
@@ -721,6 +729,167 @@ function copyBs() {
     navigator.clipboard.writeText(txt).then(function () { toast('ကော်ပီကူးပြီ'); }, function () { toast('ကော်ပီ မရဘူး'); });
   } else {
     toast('ကော်ပီ မရဘူး');
+  }
+}
+
+// ---------------------------------------------------------------- fb summary (စာရင်းချုပ်, v1.6)
+// Separate screen (reached from the body ledger): ထိုးသားစာရင်း + အကန်စာရင်း
+// in Pho's EXACT one-line-per-entry format. NO aggregate totals anywhere.
+function openFbSum() { renderFbSum(); go('scr-fbsum'); }
+function renderFbSum() {
+  var w = $('fbsumList');
+  if (!w) return;
+  var bettors = L.groupBettorEntries(state.betsFb, playerName);
+  var hedges = L.groupHedgeEntries(state.hedges);
+  var out = '';
+  out += '<div class="fs-group"><div class="fs-head">ထိုးသားစာရင်း</div>';
+  if (!bettors.length) { out += '<div class="muted">ထိုးသား မရှိသေးပါ</div>'; }
+  bettors.forEach(function (g) {
+    out += '<div class="fs-name">' + esc(g.name) + '</div>';
+    g.lines.forEach(function (ln) { out += '<div class="fs-line">' + esc(ln) + '</div>'; });
+  });
+  out += '</div>';
+  out += '<div class="fs-group"><div class="fs-head">အကန်စာရင်း</div>';
+  if (!hedges.length) { out += '<div class="muted">အကန် မရှိသေးပါ</div>'; }
+  hedges.forEach(function (g) {
+    out += '<div class="fs-name">' + esc(g.bookie) + '</div>';
+    g.lines.forEach(function (ln) { out += '<div class="fs-line">' + esc(ln) + '</div>'; });
+  });
+  out += '</div>';
+  w.innerHTML = out;
+}
+function copyFbSum() {
+  var bettors = L.groupBettorEntries(state.betsFb, playerName);
+  var hedges = L.groupHedgeEntries(state.hedges);
+  var txt = L.fbsumCopyText(bettors, hedges);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(function () { toast('ကူးယူပြီးပါပြီ'); }, function () { toast('ကူးလို့ မရပါ'); });
+  } else {
+    toast('ကူးလို့ မရပါ');
+  }
+}
+
+// ---------------------------------------------------------------- hedge sheet (v1.6)
+// Bottom sheet opened by tapping a ledger card. Draft-only until Save;
+// Cancel / ✕ / backdrop discards. Bookie = TEXT INPUT with a datalist of
+// bookies already used (Pho adds names himself at entry time — no
+// predefined list; the datalist starts empty and grows from his entries).
+// A hedge amount is stored as entered (matching the approved mockup);
+// the DISPLAYED remaining is capped at 0 and an over-net amount warns.
+// Setting an amount to 0 deletes that hedge row.
+var hedgeCtx = null; // { idx, m, bn, gn, existing }
+function yangonToday() {
+  return new Date(Date.now() + 6.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+function hedgeSheetRow(kind, label, net, draftAmt, draftBookie) {
+  var rem = L.remainingAfterHedge(net, draftAmt || 0);
+  return '<div class="hs-row" data-kind="' + kind + '">' +
+    '<div class="hs-label">' + esc(label) + ' · အကျန် <b>' + fmt(net) + '</b></div>' +
+    '<div class="hs-inputs">' +
+      '<input id="hg-amt-' + kind + '" type="number" min="0" step="500" inputmode="numeric" placeholder="ကန်မည့် ပမာဏ" value="' + (draftAmt || '') + '" oninput="updateHedgeRemain(\'' + kind + '\')">' +
+      '<input id="hg-bookie-' + kind + '" type="text" list="bookieList" placeholder="အကန်ဒိုင် နာမည်" value="' + esc(draftBookie || '') + '">' +
+      '<button type="button" onclick="hedgeAllIn(\'' + kind + '\')">အကုန်ကန်</button>' +
+    '</div>' +
+    '<div class="hs-rem" id="hg-rem-' + kind + '">ကျန် ' + fmt(rem) + '</div>' +
+    '<div class="hs-warn" id="hg-warn-' + kind + '" style="display:none">အကျန် ထက် များနေတယ် — ကျန် 0 ပဲ ဖြစ်မယ်</div>' +
+  '</div>';
+}
+function openHedgeSheet(idx) {
+  var m = BODY_NET[idx];
+  if (!m) return;
+  var bn = L.bodyNetOf(m), gn = L.goalNetOf(m);
+  var existing = state.hedgeByMatch[m.key] || { body: null, goal: null };
+  hedgeCtx = { idx: idx, m: m, bn: bn, gn: gn, existing: existing };
+  $('hedgeSheetTitle').textContent = L.ledgerHeaderText(m);
+  // Datalist of bookies already used (grows from Pho's entries).
+  var dl = $('bookieList');
+  if (dl) dl.innerHTML = L.usedBookies(state.hedges).map(function (b) { return '<option value="' + esc(b) + '">'; }).join('');
+  var body = '';
+  var hasRow = false;
+  // A row shows when the net > 0 OR a hedge already exists for that kind
+  // (so an existing hedge on a 0 net can still be seen and cleared).
+  if (bn.net > 0 || existing.body) {
+    var bSide = bn.side === 'h' ? L.teamShort(m.home) : bn.side === 'a' ? L.teamShort(m.away) : L.teamShort(m.home);
+    body += hedgeSheetRow('body', 'ဘော်ဒီ — ' + bSide, bn.net, existing.body ? existing.body.amount : '', existing.body ? existing.body.bookie : '');
+    hasRow = true;
+  }
+  if (gn.net > 0 || existing.goal) {
+    var gLabel = gn.side === 'over' ? '⬆️ ဂိုးပေါ်' : gn.side === 'under' ? '⬇️ ဂိုးအောက်' : 'ဂိုးပေါင်း';
+    body += hedgeSheetRow('goal', 'ဂိုးပေါင်း — ' + gLabel, gn.net, existing.goal ? existing.goal.amount : '', existing.goal ? existing.goal.bookie : '');
+    hasRow = true;
+  }
+  if (!hasRow) body = '<div class="muted">မျှ — ကန်စရာ မရှိ</div>';
+  $('hedgeSheetBody').innerHTML = body;
+  var saveBtn = $('hedgeSaveBtn');
+  if (saveBtn) saveBtn.style.display = hasRow ? '' : 'none';
+  $('hedgeBackdrop').classList.add('open');
+  $('hedgeSheet').classList.add('open');
+}
+function closeHedgeSheet() {
+  hedgeCtx = null;
+  var bd = $('hedgeBackdrop'); if (bd) bd.classList.remove('open');
+  var sh = $('hedgeSheet'); if (sh) sh.classList.remove('open');
+}
+function hedgeAllIn(kind) {
+  if (!hedgeCtx) return;
+  var net = kind === 'body' ? hedgeCtx.bn.net : hedgeCtx.gn.net;
+  var inp = $('hg-amt-' + kind);
+  if (inp) { inp.value = net; updateHedgeRemain(kind); }
+}
+function updateHedgeRemain(kind) {
+  if (!hedgeCtx) return;
+  var net = kind === 'body' ? hedgeCtx.bn.net : hedgeCtx.gn.net;
+  var inp = $('hg-amt-' + kind);
+  var amt = inp ? (parseInt(inp.value, 10) || 0) : 0;
+  var rem = L.remainingAfterHedge(net, amt);
+  var remEl = $('hg-rem-' + kind);
+  if (remEl) remEl.textContent = 'ကျန် ' + fmt(rem);
+  var warnEl = $('hg-warn-' + kind);
+  if (warnEl) warnEl.style.display = amt > net ? '' : 'none';
+  if (inp) inp.classList.toggle('over', amt > net);
+}
+async function saveHedgeSheet() {
+  if (!hedgeCtx) return;
+  var m = hedgeCtx.m;
+  var fx = fixtureById(m.key);
+  var drafts = { body: null, goal: null };
+  var kinds = ['body', 'goal'];
+  for (var i = 0; i < kinds.length; i++) {
+    var kind = kinds[i];
+    var net = kind === 'body' ? hedgeCtx.bn.net : hedgeCtx.gn.net;
+    var ex = kind === 'body' ? hedgeCtx.existing.body : hedgeCtx.existing.goal;
+    if (net <= 0 && !ex) continue; // no row shown for this kind; leave it alone
+    var amtInp = $('hg-amt-' + kind);
+    var bookieInp = $('hg-bookie-' + kind);
+    var amt = amtInp ? Math.max(0, parseInt(amtInp.value, 10) || 0) : 0;
+    var bookie = bookieInp ? (bookieInp.value || '').trim() : '';
+    if (amt > 0 && !bookie) { toast('အကန်ဒိုင် နာမည် ထည့်ပါ'); return; }
+    if (amt > 0) {
+      drafts[kind] = { amount: amt, bookie: bookie };
+      if (kind === 'goal') drafts[kind].side = hedgeCtx.gn.side || '';
+    }
+    // amt == 0 leaves drafts[kind] null -> saveHedges deletes the row.
+  }
+  var matchInfo = {
+    fixtureApiId: (fx && fx.api_id) || m.key,
+    date: (fx && fx.date) || yangonToday(),
+    home: m.home || '',
+    away: m.away || '',
+    bodyOdds: m.bodyOdds || '',
+    goalOdds: m.goalOdds || '',
+    bodyTeam: hedgeCtx.bn.side === 'h' ? L.teamShort(m.home) : hedgeCtx.bn.side === 'a' ? L.teamShort(m.away) : L.teamShort(m.home),
+    goalTeam: L.teamShort(m.home)
+  };
+  try {
+    await L.saveHedges(PB, hedgeCtx.existing, matchInfo, drafts);
+    state.hedges = await L.loadHedges(PB);
+    recomputeFromLive();
+    renderBsBody();
+    renderFbSum();
+    closeHedgeSheet();
+    toast('သိမ်းပြီးပါပြီ');
+  } catch (e) {
+    toast('အကန် သိမ်းလို့ မရဘူး');
   }
 }
 
@@ -802,6 +971,61 @@ function renderSummary() {
   $('sum2d').textContent = fmt(t2) + ' ကျပ်';
   $('sum3d').textContent = fmt(t3) + ' ကျပ်';
   $('sumFb').textContent = fmt(tf) + ' ကျပ်';
+  // Football net for the Daily summary (v1.6, Pho Nov 15): the bookie's net
+  // on settled football bets, with the 1.5% rebate applied behind the
+  // scenes (wins x0.965, losses x0.985 — no commission line shown).
+  // footballDailyTotal is the PLAYERS' net, so the bookie's net is its negative.
+  const fbById = {};
+  state.fixtures.forEach(function (f) { fbById[f.id] = f; });
+  const fbNetEl = $('sumFbNet');
+  if (fbNetEl) fbNetEl.textContent = fmt(-L.footballDailyTotal(state.betsFb, fbById, state.settings || {})) + ' ကျပ်';
+  // Bettor profit/loss detail (Pho Nov 15 09:00): each settled football bet
+  // shows gross (net), e.g. '+100000 (+95000)'; Total = sum of nets
+  // (Pho's example: +95000 and -100000 total -5000). This is the PLAYERS'
+  // view; the bookie's net above is its negative.
+  let fbTotal = 0;
+  const fbLines = [];
+  (state.betsFb || []).forEach(function (b) {
+    const d = L.footballDailyDetail(b, fbById, state.settings || {});
+    if (!d) return;
+    fbTotal += d.net;
+    const gs = (d.gross >= 0 ? '+' : '') + fmt(d.gross);
+    const ns = (d.net >= 0 ? '+' : '') + fmt(d.net);
+    fbLines.push(gs + ' (' + ns + ')');
+  });
+  const fbDetailEl = $('sumFbDetail');
+  if (fbDetailEl) {
+    fbDetailEl.innerHTML = fbLines.length
+      ? fbLines.map(function (l) { return '<div>' + esc(l) + '</div>'; }).join('') + '<div><b>Total ' + fmt(fbTotal) + '</b></div>'
+      : '<div>ဘောပွဲ မရှိသေးပါ</div>';
+  }
+  // Hedge profit/loss (v1.6, Pho Nov 15 08:56): the 1.5% rebate lives HERE,
+  // in the hedge profit/loss — win x0.965, loss x0.985. Each settled hedge
+  // shows gross (net), e.g. '+10000 (+9650)'; Total = sum of nets (Pho's
+  // example: +9650 and -9850 total -200). Hedges keyed by api_id.
+  const fxByApi = {};
+  state.fixtures.forEach(function (f) { if (f.api_id) fxByApi[f.api_id] = f; });
+  let hedgeTotal = 0;
+  const hedgeLines = [];
+  (state.hedges || []).forEach(function (h) {
+    const s = L.settleHedge(h, fxByApi);
+    if (!s) return;
+    const net = L.hedgeDailyResult(h, fxByApi);
+    if (net === null || net === undefined) return;
+    hedgeTotal += net;
+    const g = s.gross;
+    const gs = (g >= 0 ? '+' : '') + fmt(g);
+    const ns = (net >= 0 ? '+' : '') + fmt(net);
+    hedgeLines.push(gs + ' (' + ns + ')');
+  });
+  const hedgeNetEl = $('sumHedgeNet');
+  if (hedgeNetEl) hedgeNetEl.textContent = fmt(hedgeTotal) + ' ကျပ်';
+  const hedgeDetailEl = $('sumHedgeDetail');
+  if (hedgeDetailEl) {
+    hedgeDetailEl.innerHTML = hedgeLines.length
+      ? hedgeLines.map(function (l) { return '<div>' + esc(l) + '</div>'; }).join('') + '<div><b>Total ' + fmt(hedgeTotal) + '</b></div>'
+      : '<div>အကန် မရှိသေးပါ</div>';
+  }
   const perUser = {};
   state.players.forEach(function (p) { perUser[p.id] = 0; });
   state.bets2d.forEach(function (b) { perUser[b.player] = (perUser[b.player] || 0) + (b.total || 0); });
@@ -978,6 +1202,14 @@ window.toggleSession = toggleSession;
 window.onLimitChange = onLimitChange;
 window.loginAdmin = loginAdmin;
 window.settleFootballNow = settleFootballNow;
+window.openFbSum = openFbSum;
+window.renderFbSum = renderFbSum;
+window.copyFbSum = copyFbSum;
+window.openHedgeSheet = openHedgeSheet;
+window.closeHedgeSheet = closeHedgeSheet;
+window.hedgeAllIn = hedgeAllIn;
+window.updateHedgeRemain = updateHedgeRemain;
+window.saveHedgeSheet = saveHedgeSheet;
 
 // Named exports for Node tests (browser module load ignores them).
 export { timeFromCloseAt, resText, betStatusText, betStatusClass, legLine, fbDetailHtml, nextAccountNumber };
