@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=1.9';
+import * as L from './logic.js?v=2.0';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -158,6 +158,19 @@ async function loadAll(quiet) {
       };
     }
     state.sessions = await PB.getAll('m23_sessions', { sort: '-date' });
+    // 2D auto-schedule (Admin v2.0, Pho Nov 15 18:31-18:43): Mon-Fri the
+    // app creates today's missing am/pm 2D sessions (open=true, close_at
+    // carried forward from the latest same-period session). Sat/Sun:
+    // nothing. Creation only — an existing row is never touched, so a
+    // manual holiday close (toggle) is never undone. A failure here must
+    // never break the load, so it has its own try/catch; after creating,
+    // the session list is re-fetched so toggles + Settings show the new rows.
+    try {
+      const created = await L.ensureToday2DSessions(PB, state.sessions, todayYgn());
+      if (created.length) {
+        state.sessions = await PB.getAll('m23_sessions', { sort: '-date' });
+      }
+    } catch (e2) { /* auto-create failed — keep loading with what we have */ }
     state.players = await PB.getAll('m23_players', { sort: 'name' });
     state.requests = await PB.getAll('m23_requests', { sort: '-created' });
     state.bets2d = await PB.getAll('m23_bets_2d', { sort: '-created' });
