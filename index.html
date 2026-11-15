@@ -112,6 +112,39 @@
   .fb-bet:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
   .fb-bet .bet-row, .fb-bet .bs-row { border-bottom: none; padding-bottom: 1px; }
   .fb-leg { font-size: 12px; color: #64748b; padding: 2px 2px 2px 12px; line-height: 1.6; }
+  /* ---- body ledger + hedge (v1.6) ---- */
+  .ld-legend { font-size: 11px; color: #64748b; margin-bottom: 2px; }
+  .ld-card { border: 1px solid #e8eef5; border-radius: 12px; padding: 10px 12px; margin-bottom: 9px; background: #fff; box-shadow: 0 1px 5px rgba(30,58,95,.05); cursor: pointer; }
+  .ld-card:focus { outline: 2px solid #1e3a5f; outline-offset: 1px; }
+  .ld-head { font-weight: bold; font-size: 14px; margin-bottom: 4px; }
+  .ld-amt { display: flex; justify-content: space-between; font-size: 13px; padding: 2px 0; font-family: monospace; }
+  .ld-under { text-align: right; font-size: 13px; padding: 2px 0; font-family: monospace; }
+  .ld-net { display: flex; justify-content: space-between; font-weight: bold; color: #b91c1c; font-size: 14px; padding-top: 5px; border-top: 1px dashed #e2e8f0; margin-top: 4px; }
+  .m-hedged { color: #854d0e; background: #fef9c3; border-radius: 8px; padding: 4px 8px; font-size: 13px; font-weight: bold; margin-top: 6px; }
+  .zero { opacity: .45; }
+  .btn-block { background: linear-gradient(135deg, #1e3a5f, #2a4a73); color: #fff; border: none; border-radius: 12px; padding: 12px; width: 100%; font-size: 15px; font-weight: bold; font-family: inherit; cursor: pointer; box-shadow: 0 3px 10px rgba(30,58,95,.28); }
+  /* hedge bottom sheet */
+  .sheet-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 40; display: none; }
+  .sheet-backdrop.open { display: block; }
+  .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; background: #fff; border-radius: 16px 16px 0 0; padding: 14px 14px 18px; box-shadow: 0 -4px 24px rgba(0,0,0,.25); transform: translateY(110%); transition: transform .2s; max-height: 82vh; overflow-y: auto; pointer-events: none; }
+  .sheet.open { transform: translateY(0); pointer-events: auto; }
+  .sheet h3 { font-size: 15px; margin-bottom: 8px; padding-right: 28px; }
+  .sheet .x { position: absolute; top: 10px; right: 12px; border: none; background: none; font-size: 20px; cursor: pointer; color: #64748b; }
+  .hs-row { border: 1px solid #e8eef5; border-radius: 12px; padding: 10px; margin-bottom: 10px; }
+  .hs-label { font-size: 13px; margin-bottom: 6px; }
+  .hs-inputs { display: flex; gap: 6px; }
+  .hs-inputs input { margin-bottom: 0; flex: 1; min-width: 0; }
+  .hs-inputs button { flex-shrink: 0; background: #e8eef5; border: none; border-radius: 10px; padding: 0 10px; font-size: 13px; font-weight: bold; font-family: inherit; cursor: pointer; }
+  .hs-rem { color: #b91c1c; font-weight: bold; font-size: 13px; margin-top: 6px; }
+  .hs-warn { color: #b91c1c; font-size: 12px; margin-top: 4px; }
+  input.over { border-color: #dc2626 !important; }
+  .sheet .sactions { display: flex; gap: 8px; margin-top: 4px; }
+  .sheet .sactions button { flex: 1; }
+  /* fb summary (စာရင်းချုပ်) */
+  .fs-group { margin-bottom: 14px; }
+  .fs-head { font-size: 15px; font-weight: bold; color: #1e3a5f; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 2px solid #1e3a5f; }
+  .fs-name { font-weight: bold; font-size: 14px; margin: 8px 0 2px; }
+  .fs-line { font-family: monospace; font-size: 13px; padding: 1px 0 1px 10px; }
 </style>
 </head>
 <body>
@@ -127,7 +160,7 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v1.5</span></div>
+<div class="topbar"><h1><img src="logo.png" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v1.6</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
@@ -300,6 +333,15 @@
   <button class="btn-navy" onclick="copyBs()">📋 ကော်ပီကူးမယ်</button>
 </div>
 
+<!-- fb summary (စာရင်းချုပ်, v1.6) -->
+<div class="screen" id="scr-fbsum">
+  <div class="card">
+    <div id="fbsumList"></div>
+  </div>
+  <button class="btn-navy" onclick="copyFbSum()">စာရင်းချုပ် ကူးမယ်</button>
+  <button class="btn-ghost" onclick="go('scr-bigsmall');setBsTab('body')" style="width:100%;margin-top:8px">‹ လယ်ဂျာ ပြန်သွားမယ်</button>
+</div>
+
 <!-- summary -->
 <div class="screen" id="scr-summary">
   <div class="stats">
@@ -313,6 +355,10 @@
     <div class="bet-row"><span>2D</span><span class="amt" id="sum2d">28,000 ကျပ်</span></div>
     <div class="bet-row"><span>3D</span><span class="amt" id="sum3d">7,000 ကျပ်</span></div>
     <div class="bet-row"><span>ဘောပွဲ (1D)</span><span class="amt" id="sumFb">17,000 ကျပ်</span></div>
+    <div class="bet-row"><span>ဘောပွဲ အမြတ်/အရှုံး</span><span class="amt" id="sumFbNet">0 ကျပ်</span></div>
+    <div id="sumFbDetail" class="muted" style="font-size:12px;line-height:1.7;padding-left:2px"></div>
+    <div class="bet-row"><span>အကန် အမြတ်/အရှုံး</span><span class="amt" id="sumHedgeNet">0 ကျပ်</span></div>
+    <div id="sumHedgeDetail" class="muted" style="font-size:12px;line-height:1.7;padding-left:2px"></div>
   </div>
   <div class="card">
     <h3>ယူဆာ အလိုက်</h3>
@@ -380,6 +426,19 @@
 </nav>
 <div id="toast"></div>
 
-<script type="module" src="admin.js"></script>
+<!-- hedge bottom sheet (v1.6) -->
+<div class="sheet-backdrop" id="hedgeBackdrop" onclick="closeHedgeSheet()"></div>
+<div class="sheet" id="hedgeSheet" role="dialog" aria-modal="true">
+  <button class="x" onclick="closeHedgeSheet()">✕</button>
+  <h3 id="hedgeSheetTitle">အကန်</h3>
+  <div id="hedgeSheetBody"></div>
+  <div class="sactions">
+    <button class="btn-ghost" onclick="closeHedgeSheet()">ပယ်ဖျက်</button>
+    <button class="btn-navy" id="hedgeSaveBtn" onclick="saveHedgeSheet()" style="flex:2">Save</button>
+  </div>
+  <datalist id="bookieList"></datalist>
+</div>
+
+<script type="module" src="admin.js?v=1.6"></script>
 </body>
 </html>
