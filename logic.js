@@ -283,6 +283,31 @@ export function carriedCloseTime(sessions, period) {
   });
   return latest ? closeTimeOf(latest.close_at) : def;
 }
+// winInputsFromSessions: the win-input values for the Admin results screen
+// (v2.1, Pho Nov 16): {am, pm, round} as strings taken from the LATEST
+// session of each game/period's saved win_number. '' when a session has no
+// win_number saved yet. Pure — the DOM fill lives in admin.js
+// (fillWinInputs, once on load only, so the 30s auto-refresh never
+// clobbers a value the operator is typing).
+export function winInputsFromSessions(sessions) {
+  function latest(game, period) {
+    let row = null;
+    (sessions || []).forEach(function (s) {
+      if (s.game !== game || s.period !== period) return;
+      if (!row || String(s.date).localeCompare(String(row.date)) > 0) row = s;
+    });
+    return row;
+  }
+  function val(s) {
+    if (!s || s.win_number === undefined || s.win_number === null) return '';
+    return String(s.win_number);
+  }
+  return {
+    am: val(latest('2d', 'am')),
+    pm: val(latest('2d', 'pm')),
+    round: val(latest('3d', 'round'))
+  };
+}
 // missing2DPeriods: which 2D periods still need a session created for
 // `yangonDate` ("YYYY-MM-DD", Yangon). Sat (6) / Sun (0) -> [] (weekend
 // closed). Otherwise ['am','pm'] minus periods that already have a 2D
