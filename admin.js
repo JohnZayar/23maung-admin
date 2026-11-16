@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.0';
+import * as L from './logic.js?v=2.1';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -183,6 +183,7 @@ async function loadAll(quiet) {
     try { state.hedges = await PB.getAll('m23_hedges', { sort: '-created' }); }
     catch (e2) { state.hedges = []; }
     state.loaded = true;
+    fillWinInputs();
     recomputeFromLive();
     renderAll();
     startAutoRefresh();
@@ -541,6 +542,20 @@ function renderResults() {
   const hbR = $('hbRes'); if (hbR) hbR.textContent = pending + ' ပွဲ';
 }
 
+// fillWinInputs (v2.1, Pho Nov 16): after a save+reload the win inputs
+// looked empty even though win_number was saved — fill them once on load
+// from the latest sessions' saved win_number. Fill-once only: loadAll
+// re-runs every 30s (auto-refresh), and re-filling would clobber a value
+// the operator is typing. Only non-empty values are written.
+let _winInputsFilled = false;
+function fillWinInputs() {
+  if (_winInputsFilled) return;
+  _winInputsFilled = true;
+  const v = L.winInputsFromSessions(state.sessions);
+  if (v.am) $('win2dAm').value = v.am;
+  if (v.pm) $('win2dPm').value = v.pm;
+  if (v.round) $('win3d').value = v.round;
+}
 // saveWins: 2D/3D winning numbers are MANUAL — write win_number to the
 // matching m23_sessions row, then run settlement (logic.settleSession).
 async function saveWins() {
