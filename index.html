@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>23မောင်း Admin</title>
-<link rel="icon" type="image/png" href="logo.png">
+<link rel="icon" type="image/png" href="logo.png?v=2.2">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, "Myanmar Text", "Pyidaungsu", sans-serif; background: #eef2f7; color: #1e293b; padding-bottom: 64px; font-size: 14px; }
@@ -60,7 +60,8 @@
   .res-in span { font-weight: bold; white-space: nowrap; font-size: 14px; }
   .res-in input { margin: 0; text-align: center; }
   nav { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #e8eef5; display: flex; height: 56px; z-index: 10; box-shadow: 0 -2px 12px rgba(30,58,95,.07); padding: 4px 6px; }
-  nav button { flex: 1; background: none; border: none; font-size: 10px; font-weight: bold; font-family: inherit; color: #64748b; cursor: pointer; border-radius: 10px; white-space: nowrap; overflow: hidden; padding: 0 1px; }
+  nav button { flex: 1; background: none; border: none; font-size: 10px; font-weight: bold; font-family: inherit; color: #64748b; cursor: pointer; border-radius: 10px; white-space: nowrap; overflow: hidden; padding: 0 1px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  nav button svg { display: block; width: 20px; height: 20px; margin: 0 auto 1px; }
   nav button.on { color: #1e3a5f; background: #e8eef5; }
   #toast { position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); background: #1e293b; color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 14px; display: none; z-index: 50; white-space: nowrap; max-width: 94vw; overflow: hidden; text-overflow: ellipsis; }
   .sect { font-size: 14px; font-weight: bold; color: #1e3a5f; margin: 14px 2px 7px; border-left: 3px solid #d4af37; padding-left: 8px; }
@@ -155,7 +156,7 @@
 
 <div id="loginGate" style="display:none;position:fixed;inset:0;background:#eef2f7;z-index:100;padding:24px 14px;overflow:auto">
   <div class="card" style="max-width:380px;margin:60px auto;text-align:center">
-    <img src="logo.png" alt="23မောင်း" style="height:64px;border-radius:12px;margin-bottom:8px">
+    <img src="logo.png?v=2.2" alt="23မောင်း" style="height:64px;border-radius:12px;margin-bottom:8px">
     <h3>23မောင်း Admin</h3>
     <p class="muted" style="margin-bottom:10px">Admin အကောင့်နဲ့ ဝင်ပါ (PocketBase superuser)</p>
     <input type="text" id="loginEmail" placeholder="Admin email" autocomplete="username">
@@ -164,7 +165,7 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.1</span></div>
+<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.2</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
@@ -421,12 +422,12 @@
 </div>
 
 <nav>
-  <button class="on" data-scr="scr-home" onclick="go('scr-home')">ပင်မ</button>
-  <button data-scr="scr-req" onclick="go('scr-req')">တောင်းဆိုမှု</button>
-  <button data-scr="scr-bets" onclick="go('scr-bets')">လောင်းကစား</button>
-  <button data-scr="scr-res" onclick="go('scr-res')">ရလဒ်</button>
-  <button data-scr="scr-ledger" onclick="go('scr-ledger')">လယ်ဂျာ</button>
-  <button data-scr="scr-set" onclick="go('scr-set')">သတ်မှတ်ချက်</button>
+  <button class="on" data-scr="scr-home" onclick="go('scr-home')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5 12 3l9 6.5"/><path d="M5 10.5V18M9.7 10.5V18M14.3 10.5V18M19 10.5V18"/><path d="M2.5 21h19"/></svg>ပင်မ</button>
+  <button data-scr="scr-req" onclick="go('scr-req')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>တောင်းဆိုမှု</button>
+  <button data-scr="scr-bets" onclick="go('scr-bets')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>လောင်းကစား</button>
+  <button data-scr="scr-res" onclick="go('scr-res')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v6a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4a1 1 0 0 0-1 1c0 2.5 2 4 4 4"/><path d="M17 6h3a1 1 0 0 1 1 1c0 2.5-2 4-4 4"/></svg>ရလဒ်</button>
+  <button data-scr="scr-ledger" onclick="go('scr-ledger')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 12h6M9 16h6"/></svg>လယ်ဂျာ</button>
+  <button data-scr="scr-set" onclick="go('scr-set')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1"/></svg>သတ်မှတ်ချက်</button>
 </nav>
 <div id="toast"></div>
 
@@ -443,6 +444,6 @@
   <datalist id="bookieList"></datalist>
 </div>
 
-<script type="module" src="admin.js?v=2.1"></script>
+<script type="module" src="admin.js?v=2.2"></script>
 </body>
 </html>
