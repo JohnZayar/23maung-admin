@@ -236,6 +236,75 @@ export function buildCloseAt(sessionDate, time) {
   return d + ' ' + time + ':00';
 }
 
+// ---- Admin record date picker (Admin v2.3, Pho Nov 17) ----------------------
+// MOUNG556-style calendar popup, SAME behaviour as Player v2.10's voucher
+// calendar (openVouchCal/renderVouchCal/calCells there): month view, prev/
+// next arrows, weekday header S M T W T F S, Sat/Sun red, today filled red
+// circle, future dates greyed out + not selectable, grey Yesterday/Today
+// buttons, backdrop-tap closes without changing the date, selected non-today
+// date gets a red outline ring. The calendar grid itself is pure (calCells)
+// so Node tests can exercise it without a DOM.
+
+// fmtDateOnly: 'YYYY-MM-DD' -> 'DD.MM.YYYY' (Player v2.10, verbatim).
+export function fmtDateOnly(d) {
+  if (!d) return '';
+  const p = String(d).slice(0, 10).split('-');
+  return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : String(d);
+}
+// ymdAdd: 'YYYY-MM-DD' shifted by `days` (Player v2.10, verbatim).
+export function ymdAdd(ymd, days) {
+  const p = String(ymd || '').split('-');
+  if (p.length !== 3) return ymd;
+  const d = new Date(Date.UTC(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10) + days));
+  return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
+}
+function pad2(n) { return ('0' + n).slice(-2); }
+// Calendar grid cells for month (y, m 0-based): leading blanks are null;
+// each day is {d, ymd, we (Sat/Sun), future, today, sel} (Player v2.10, verbatim).
+export function calCells(y, m, todayYmd, selYmd) {
+  const first = new Date(Date.UTC(y, m, 1)).getUTCDay(); // 0 = Sunday
+  const dim = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  const cells = [];
+  for (let i = 0; i < first; i++) cells.push(null);
+  for (let d = 1; d <= dim; d++) {
+    const ymd = y + '-' + pad2(m + 1) + '-' + pad2(d);
+    const wd = new Date(Date.UTC(y, m, d)).getUTCDay();
+    cells.push({ d: d, ymd: ymd, we: (wd === 0 || wd === 6), future: !!(todayYmd && ymd > todayYmd), today: (ymd === todayYmd), sel: (ymd === selYmd) });
+  }
+  return cells;
+}
+
+// adminBetDate: the Yangon date (YYYY-MM-DD) of one bet row, for the Admin
+// record screens (လယ်ဂျာ / ကြီးငယ် / လောင်းကစား).
+//   2D/3D: the bet's SESSION's Yangon date (sessions are in state; a 3D
+//     round's date is its session date, same as 2D's).
+//   Football (kind 'fb'): the bet record's `created` Yangon date. The
+//     screens never join football bets to fixtures for a date — fixtures
+//     are only joined for kickoff TIMES (renderBs parlay / ledger cards),
+//     so `created` is the date the screens already use.
+// Returns null when the date cannot be resolved (no session row, unparsable
+// session/created value) — such bets are SHOWN, never hidden (betMatchesDate).
+export function adminBetDate(bet, sessions, kind) {
+  if (!bet) return null;
+  if (kind === 'fb') return bet.created ? yangonDateOf(bet.created) : null;
+  if (bet.session) {
+    const s = (sessions || []).find(function (r) { return r.id === bet.session; });
+    if (s) return yangonDateOf(s.date);
+    return null; // session row missing — unresolvable, shown
+  }
+  return null;
+}
+// betMatchesDate: true when the bet belongs on `ymd`, OR its date cannot
+// be resolved (shown, never hidden). Only a KNOWN different date hides it.
+export function betMatchesDate(bet, sessions, kind, ymd) {
+  const d = adminBetDate(bet, sessions, kind);
+  return d === null || d === ymd;
+}
+// filterBetsByDate: the selected date's bets (plus unresolvable ones).
+export function filterBetsByDate(bets, sessions, kind, ymd) {
+  return (bets || []).filter(function (b) { return betMatchesDate(b, sessions, kind, ymd); });
+}
+
 // ---- 2D auto-schedule (Admin v2.0, Pho Nov 15 18:31-18:43) -----------------
 // 2D opens Mon-Fri, morning AND evening (2 sessions/day); Sat + Sun CLOSED
 // every week. Mon-Fri the morning session auto-opens 10:00 and the evening
