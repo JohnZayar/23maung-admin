@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.4';
+import * as L from './logic.js?v=2.5';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -21,7 +21,9 @@ const state = {
   hedges: [],          // m23_hedges (Admin v1.6)
   hedgeByMatch: {},   // match key -> {body, goal} hedge rows
   adminDate: null,    // record date picker (Admin v2.3): 'YYYY-MM-DD' Yangon; null until set
-  adminCalView: null  // calendar popup viewed month {y, m} (m 0-based)
+  adminCalView: null, // calendar popup viewed month {y, m} (m 0-based)
+  adminPeriod: null,  // 2D period switch (Admin v2.5): 'am' | 'pm' | 'both'; null until resolved
+  adminPeriodManual: false // operator tapped a pill — the auto clock rule must not override it
 };
 
 // Mockup sample data (kept as the pre-login / offline fallback).
@@ -342,6 +344,7 @@ function fbDetailHtml(b, withTime, fixturesById) {
 
 function renderAll() {
   syncAdminDateText();
+  syncAdminPeriod();
   renderRequests();
   renderBets();
   renderLedger2D(); renderLedger3D(); renderLedgerFb();
@@ -374,8 +377,44 @@ function syncAdminDateText() {
 function setAdminDate(ymd) {
   if (typeof ymd !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return;
   state.adminDate = ymd;
+  // Admin v2.5: a new picked date re-autos the period switch — a manual
+  // tap from the old date must not carry over to the new one.
+  state.adminPeriod = null;
+  state.adminPeriodManual = false;
   syncAdminDateText();
   if (state.loaded) recomputeFromLive();
+  renderAll();
+}
+// ---------------------------------------------------------------- 2D period switch (Admin v2.5)
+// Pho (Nov 17 09:14): at 11:00 the morning ledger shows, at 14:00 the
+// evening ledger shows — the 2D screens must follow the clock so morning
+// and evening are never mixed on screen. ONE shared switch across all
+// three 2D views (လယ်ဂျာ grid, ကြီးငယ် list, လောင်းကစား detail), like the
+// shared date (v2.3). Auto default: before 14:00 Yangon -> 'am', from
+// 14:00 -> 'pm', and 'both' when the picked date is not today. A manual
+// tap overrides the auto choice and survives the 30s auto-refresh
+// (adminPeriodManual — same fill-once idea as fillWinInputs); changing
+// the picked date clears it (see setAdminDate above). The auto value is
+// re-resolved on every render while not manual, so an app left open
+// across 14:00 flips to the evening ledger by itself.
+// `now` is optional (Date.now() in the app; tests pass explicit times).
+function resolveAdminPeriod(now) {
+  if (!state.adminPeriodManual) {
+    state.adminPeriod = L.defaultAdminPeriod(ensureAdminDate(), todayYgn(), now === undefined ? Date.now() : now);
+  }
+  return state.adminPeriod || 'both';
+}
+function syncAdminPeriod() {
+  resolveAdminPeriod();
+  document.querySelectorAll('[data-per]').forEach(function (b) {
+    b.classList.toggle('on', b.dataset.per === state.adminPeriod);
+  });
+}
+function setAdminPeriod(p) {
+  if (p !== 'am' && p !== 'pm' && p !== 'both') return;
+  state.adminPeriod = p;
+  state.adminPeriodManual = true;
+  syncAdminPeriod();
   renderAll();
 }
 function renderAdminCal() {
@@ -605,6 +644,9 @@ async function createPlayer() {
 function renderBets() {
   if (!state.loaded) return; // keep the mockup's three sample user cards
   const d = ensureAdminDate();
+  // Admin v2.5: the 2D period switch — one shared state across all three
+  // 2D views, so the detail here follows the same period as လယ်ဂျာ + ကြီးငယ်.
+  const per = resolveAdminPeriod();
   const wrap = $('betsList');
   const rows = state.players.map(function (p) {
     const b2 = state.bets2d.filter(function (b) { return b.player === p.id && L.betMatchesDate(b, state.sessions, '2d', d); });
@@ -613,10 +655,18 @@ function renderBets() {
     const total = b2.reduce(function (a, b) { return a + (b.total || 0); }, 0) +
       b3.reduce(function (a, b) { return a + (b.total || 0); }, 0) +
       bf.reduce(function (a, b) { return a + (b.stake || 0); }, 0);
-    if (!b2.length && !b3.length && !bf.length) return '';
-    function betRows(list, label) {
+    // Admin v2.5: this user's 2D bets split by session period (unresolvable
+    // period counts in AM — L.split2DByPeriod, shown never hidden). Only
+    // the switched-on section(s) render; the card shows only when the
+    // current view has something to show. The header total above stays the
+    // combined day total, like the ledger day-total stats.
+    const s2 = L.split2DByPeriod(b2, state.sessions, d);
+    const b2am = per === 'pm' ? [] : s2.am;
+    const b2pm = per === 'am' ? [] : s2.pm;
+    if (!b2am.length && !b2pm.length && !b3.length && !bf.length) return '';
+    function betRows(list, label, withSub) {
       if (!list.length) return '';
-      return '<div class="glabel">' + label + '</div>' + list.map(function (b) {
+      var out = '<div class="glabel">' + label + '</div>' + list.map(function (b) {
         const what = b.lines
           ? b.lines.map(function (ln) { return ln.n + (ln.rev ? ' (အာ ' + L.reverse2(ln.n) + ')' : ''); }).join(' · ')
           : fbBetLabel(b);
@@ -632,12 +682,17 @@ function renderBets() {
         }
         return row;
       }).join('');
+      if (withSub) {
+        var st = list.reduce(function (a, b) { return a + (b.lines ? (b.total || 0) : (b.stake || 0)); }, 0);
+        out += '<div class="bet-row"><span class="what"><b>စုစုပေါင်း</b></span><span class="amt"><b>' + fmt(st) + ' ကျပ်</b></span></div>';
+      }
+      return out;
     }
     const cid = 'uc-' + esc(p.id);
     return '<div class="user-card" id="' + cid + '">' +
       '<div class="user-head" onclick="toggleUser(\'' + cid + '\')"><span>' + esc(p.name || p.email) + ' <span class="arr">›</span></span><span class="tot">' + fmt(total) + ' ကျပ်</span></div>' +
       '<div class="user-body">' +
-      betRows(b2, '2D') + betRows(b3, '3D') + betRows(bf, '1D (ဘောပွဲ)') +
+      betRows(b2am, '2D မနက်ပိုင်း', true) + betRows(b2pm, '2D ညနေပိုင်း', true) + betRows(b3, '3D') + betRows(bf, '1D (ဘောပွဲ)') +
       '</div></div>';
   }).join('');
   wrap.innerHTML = rows || '<div class="muted">လောင်းကစား မရှိသေးဘူး</div>';
@@ -774,13 +829,22 @@ function renderLedger2D() {
   var lim = limitOf('2d');
   // Admin v2.4 am/pm split (Pho Nov 17): two grids, one per session.
   // The day total (ledSub2d + ledTot2d) is AM + PM and stays combined.
+  var per = resolveAdminPeriod();
   var gAm = $('ledGrid2dAm'); if (gAm) gAm.innerHTML = ledGridHtml(LED2D_AM, lim);
   var gPm = $('ledGrid2dPm'); if (gPm) gPm.innerHTML = ledGridHtml(LED2D_PM, lim);
   var tAm = totOf(LED2D_AM), tPm = totOf(LED2D_PM), tot = tAm + tPm;
-  const subAm = $('ledSub2dAm'); if (subAm) subAm.textContent = 'မနက်ပိုင်း စုစုပေါင်း ' + fmt(tAm) + ' ကျပ်';
-  const subPm = $('ledSub2dPm'); if (subPm) subPm.textContent = 'ညနေပိုင်း စုစုပေါင်း ' + fmt(tPm) + ' ကျပ်';
+  // Admin v2.5 LABEL FIX: the section heads in index.html already carry
+  // the static 'မနက်ပိုင်း ·' / 'ညနေပိုင်း ·' prefix — the span must hold
+  // ONLY the subtotal, or the period name renders twice
+  // ('မနက်ပိုင်း · မနက်ပိုင်း စုစုပေါင်း …', seen on Pho's phone screenshot).
+  const subAm = $('ledSub2dAm'); if (subAm) subAm.textContent = 'စုစုပေါင်း ' + fmt(tAm) + ' ကျပ်';
+  const subPm = $('ledSub2dPm'); if (subPm) subPm.textContent = 'စုစုပေါင်း ' + fmt(tPm) + ' ကျပ်';
   const sub = $('ledSub2d'); if (sub) sub.textContent = 'စုစုပေါင်း ' + fmt(tot) + ' ကျပ်';
   const t2 = $('ledTot2d'); if (t2) t2.textContent = fmt(tot);
+  // Admin v2.5 period switch: hide the non-selected section(s). The day
+  // total above stays combined; only the sections follow the switch.
+  const secAm = $('ledSec2dAm'); if (secAm) secAm.style.display = per === 'pm' ? 'none' : '';
+  const secPm = $('ledSec2dPm'); if (secPm) secPm.style.display = per === 'am' ? 'none' : '';
 }
 function renderLedger3D() {
   var w = $('ledList3d');
@@ -893,12 +957,19 @@ function bsSectionHtml(title, list) {
 function renderBs() {
   var w = $('bsList');
   if (!w) return;
+  // Admin v2.5: the period pills show only on the 2D tab (3D / body /
+  // parlay have no morning/evening split).
+  var pr = $('perRowBs'); if (pr) pr.style.display = (bsTab === '2d') ? '' : 'none';
   if (bsTab === 'body') { renderBsBody(); return; }
   if (bsTab === '2d') {
     // Admin v2.4 am/pm split (Pho Nov 17): two biggest-first lists, one
     // per session — morning and evening are separate draws and must never
-    // be mixed.
-    w.innerHTML = bsSectionHtml('မနက်ပိုင်း', BS['2dAm'] || []) + bsSectionHtml('ညနေပိုင်း', BS['2dPm'] || []);
+    // be mixed. Admin v2.5: the switch shows only the selected section(s).
+    var per = resolveAdminPeriod();
+    var out = '';
+    if (per !== 'pm') out += bsSectionHtml('မနက်ပိုင်း', BS['2dAm'] || []);
+    if (per !== 'am') out += bsSectionHtml('ညနေပိုင်း', BS['2dPm'] || []);
+    w.innerHTML = out;
     return;
   }
   // Parlay (v1.7): earliest leg kickoff first, unknown last; each leg
@@ -1420,6 +1491,7 @@ async function saveSettings() {
 // ---------------------------------------------------------------- init
 ensureAdminDate();
 syncAdminDateText();
+syncAdminPeriod();
 renderBs();
 renderBlocked();
 renderLedger2D(); renderLedger3D(); renderLedgerFb();
@@ -1432,6 +1504,7 @@ window.toast = toast;
 window.setReqTab = setReqTab;
 window.toggleUser = toggleUser;
 window.setBsTab = setBsTab;
+window.setAdminPeriod = setAdminPeriod;
 window.copyBs = copyBs;
 window.setLedTab = setLedTab;
 window.setBlockedGame = setBlockedGame;
@@ -1468,6 +1541,7 @@ window.saveHedgeSheet = saveHedgeSheet;
 export { timeFromCloseAt, resText, betStatusText, betStatusClass, legLine, fbDetailHtml, nextAccountNumber };
 export { renderAll, renderBets, renderLedger2D, renderLedger3D, renderLedgerFb, renderBs, bsText, recomputeFromLive, setBsTab, setLedTab };
 export { ensureAdminDate, setAdminDate, syncAdminDateText, openAdminCal, closeAdminCal, renderAdminCal, adminCalMove, adminCalPick, adminCalQuick };
+export { resolveAdminPeriod, setAdminPeriod, syncAdminPeriod };
 // Test hook (Node tests only): replace the live state + aggregates wholesale
 // so the render functions can be exercised without PocketBase.
 export function setTestState(patch) {
