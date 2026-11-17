@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.6';
+import * as L from './logic.js?v=2.7';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -992,9 +992,16 @@ function renderBs() {
 function bsText() {
   if (bsTab === 'body') return bsBodyText();
   if (bsTab === '2d') {
-    // Admin v2.4 am/pm split: copy carries both sections with headings.
+    // Admin v2.7 (Pho Nov 17 15:49): copy follows the period switch — the
+    // same sections the screen shows. Before this the copy always carried
+    // BOTH sections whatever the switch said (flagged 09:28). 'both' keeps
+    // the old both-sections copy.
+    var per = resolveAdminPeriod();
     var lines = ['2D ကြီးငယ်စာရင်း'];
-    [['မနက်ပိုင်း', BS['2dAm'] || []], ['ညနေပိုင်း', BS['2dPm'] || []]].forEach(function (sec) {
+    var secs = [];
+    if (per !== 'pm') secs.push(['မနက်ပိုင်း', BS['2dAm'] || []]);
+    if (per !== 'am') secs.push(['ညနေပိုင်း', BS['2dPm'] || []]);
+    secs.forEach(function (sec) {
       lines.push(sec[0] + ':');
       L.sortBsDesc(sec[1]).forEach(function (e, i) { lines.push((i + 1) + '. ' + e.n + ' = ' + e.v); });
     });
