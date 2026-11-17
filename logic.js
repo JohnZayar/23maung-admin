@@ -333,6 +333,32 @@ export function split2DByPeriod(bets, sessions, ymd) {
   return { am: am, pm: pm };
 }
 
+// ---- 2D period switch (Admin v2.5, Pho Nov 17) ---------------------------------
+// The 2D screens (လယ်ဂျာ grid, ကြီးငယ် list, လောင်းကစား detail) follow the
+// clock: at 11:00 the morning ledger shows, at 14:00 the evening ledger
+// shows — morning and evening must never be mixed on screen. The switch
+// itself is 'am' | 'pm' | 'both'; the AUTO default is by Yangon time, and
+// a past picked date has no "current" period, so it defaults to 'both'.
+// autoPeriodYangon takes an explicit `now` (Date, ms number or parseable
+// string) so it is unit-testable; invalid input defaults to 'am'.
+export function autoPeriodYangon(now) {
+  const ms = now instanceof Date ? now.getTime()
+    : (typeof now === 'number' ? now : new Date(now).getTime());
+  if (isNaN(ms)) return 'am';
+  // Yangon is UTC+6:30 — shift to Yangon wall-clock, then read the hour.
+  const ygnHour = new Date(ms + 6.5 * 3600 * 1000).getUTCHours();
+  return ygnHour < 14 ? 'am' : 'pm';
+}
+// defaultAdminPeriod: the switch default for the picked record date.
+// 'both' when the date is not today (no current period to follow);
+// the clock rule when it is today. Pure — the manual override lives in
+// admin.js (state.adminPeriodManual), never here.
+export function defaultAdminPeriod(adminDate, todayYmd, now) {
+  if (typeof adminDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(adminDate)) return 'both';
+  if (adminDate !== todayYmd) return 'both';
+  return autoPeriodYangon(now);
+}
+
 // ---- 2D auto-schedule (Admin v2.0, Pho Nov 15 18:31-18:43) -----------------
 // 2D opens Mon-Fri, morning AND evening (2 sessions/day); Sat + Sun CLOSED
 // every week. Mon-Fri the morning session auto-opens 10:00 and the evening
