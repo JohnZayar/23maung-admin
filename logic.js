@@ -305,6 +305,34 @@ export function filterBetsByDate(bets, sessions, kind, ymd) {
   return (bets || []).filter(function (b) { return betMatchesDate(b, sessions, kind, ymd); });
 }
 
+// adminBetPeriod: the session period ('am'/'pm') of one 2D bet row, for the
+// Admin v2.4 am/pm split (Pho Nov 17: "ခွဲပြမှ အမှန်ရမယ်" — morning and
+// evening are separate draws and must never be mixed). Only 2D bets have
+// am/pm periods; 3D rounds ('round') and football have none, so this
+// returns null for them. Returns null when the period cannot be resolved
+// (no session id, session row missing, or an unknown period value).
+export function adminBetPeriod(bet, sessions, kind) {
+  if (!bet || kind !== '2d') return null;
+  if (bet.session) {
+    const s = (sessions || []).find(function (r) { return r.id === bet.session; });
+    if (s && (s.period === 'am' || s.period === 'pm')) return s.period;
+    return null;
+  }
+  return null;
+}
+// split2DByPeriod: the selected date's 2D bets split into { am, pm }.
+// A bet whose period cannot be resolved counts in AM (shown, never hidden,
+// never double-counted) — the AM section is the default bucket, mirroring
+// the v2.3 rule that unresolvable bets are shown, never hidden.
+export function split2DByPeriod(bets, sessions, ymd) {
+  const day = filterBetsByDate(bets, sessions, '2d', ymd);
+  const am = [], pm = [];
+  day.forEach(function (b) {
+    if (adminBetPeriod(b, sessions, '2d') === 'pm') pm.push(b); else am.push(b);
+  });
+  return { am: am, pm: pm };
+}
+
 // ---- 2D auto-schedule (Admin v2.0, Pho Nov 15 18:31-18:43) -----------------
 // 2D opens Mon-Fri, morning AND evening (2 sessions/day); Sat + Sun CLOSED
 // every week. Mon-Fri the morning session auto-opens 10:00 and the evening
