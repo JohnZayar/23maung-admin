@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.3';
+import * as L from './logic.js?v=2.4';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -26,6 +26,11 @@ const state = {
 
 // Mockup sample data (kept as the pre-login / offline fallback).
 var LED2D = { '09': 5000, '12': 1500, '21': 1500, '45': 5000, '78': 5000, '90': 5000, '99': 5000 };
+// Admin v2.4 am/pm split (Pho Nov 17): the same mockup day total (28,000)
+// split by session — AM 11,500 + PM 16,500. LED2D stays the combined day
+// total (ledger stats row + ledTotAll); the two sections below are the split.
+var LED2D_AM = { '09': 5000, '12': 1500, '45': 5000 };
+var LED2D_PM = { '21': 1500, '78': 5000, '90': 5000, '99': 5000 };
 var LED3D = { '357': 5000, '123': 1000, '321': 1000 };
 var LEDFB = [
   { user: 'User002', what: 'မောင်း 3 ပွဲ — မန်စီးတီး · လာဇီယို · ရိုးမား', amt: 5000 },
@@ -34,6 +39,9 @@ var LEDFB = [
 ];
 var BS = {
   '2d': [ { n: '12', v: 7500 }, { n: '65', v: 6500 }, { n: '45', v: 2500 } ],
+  // Admin v2.4 am/pm split: the mockup '2d' list above, split by session.
+  '2dAm': [ { n: '12', v: 5000 }, { n: '45', v: 2500 } ],
+  '2dPm': [ { n: '12', v: 2500 }, { n: '65', v: 6500 } ],
   '3d': [ { n: '357', v: 5000 }, { n: '123', v: 1000 }, { n: '321', v: 1000 } ],
   'parlay': [ { n: 'User002 — မောင်း 3 ပွဲ', v: 5000 } ]
 };
@@ -208,15 +216,23 @@ async function loadAll(quiet) {
 function recomputeFromLive() {
   const d = ensureAdminDate();
   const b2 = L.filterBetsByDate(state.bets2d, state.sessions, '2d', d);
+  const s2 = L.split2DByPeriod(state.bets2d, state.sessions, d);
   const b3 = L.filterBetsByDate(state.bets3d, state.sessions, '3d', d);
   const bf = L.filterBetsByDate(state.betsFb, state.sessions, 'fb', d);
   LED2D = L.aggregate2D(b2);
+  // Admin v2.4 am/pm split (Pho Nov 17): morning and evening are separate
+  // draws — their totals live in separate sections and must never be mixed.
+  // LED2D above stays the combined day total (stats row + ledTotAll).
+  LED2D_AM = L.aggregate2D(s2.am);
+  LED2D_PM = L.aggregate2D(s2.pm);
   LED3D = L.aggregate3D(b3);
   LEDFB = bf.map(function (b) {
     return { user: playerName(b.player), what: fbBetLabel(b), amt: b.stake || b.total || 0, bet: b };
   });
   BS = {
     '2d': L.bsEntriesFromTotals(LED2D),
+    '2dAm': L.bsEntriesFromTotals(LED2D_AM),
+    '2dPm': L.bsEntriesFromTotals(LED2D_PM),
     '3d': L.bsEntriesFromTotals(LED3D),
     'parlay': L.sortBsDesc(bf.filter(function (b) { return b.type === 'parlay'; }).map(function (b) {
       return { n: playerName(b.player) + ' — မောင်း ' + (b.legs || []).length + ' ပွဲ', v: b.stake || 0, bet: b };
@@ -737,21 +753,32 @@ async function onLimitChange(game) {
   else if (game === '3d') renderLedger3D();
   else renderLedgerFb();
 }
-function renderLedger2D() {
-  var g = $('ledGrid2d');
-  if (!g) return;
-  var lim = limitOf('2d');
+function totOf(tot) { return Object.keys(tot).reduce(function (a, k) { return a + tot[k]; }, 0); }
+// One 00–99 grid for one 2D session's totals. Limit/blocked red is
+// per-section (Admin v2.4): a number is red only when THIS session's total
+// on it exceeds the limit (or it is blocked) — never because the other
+// session pushed the combined total over.
+function ledGridHtml(tot, lim) {
   var out = '';
   for (var i = 0; i < 100; i++) {
     var n = ('0' + i).slice(-2);
-    var v = LED2D[n] || 0;
+    var v = tot[n] || 0;
     // Blocked = RED, identical to over-limit (cellClass returns ' over'
     // for both — never dark, never strikethrough, never '(ပိတ်)').
     var cls = L.cellClass(v, lim, BLOCKED['2d'].indexOf(n) >= 0);
     out += '<div class="led-cell' + cls + '"><b>' + n + '</b>' + (v ? fmt(v) : '–') + '</div>';
   }
-  g.innerHTML = out;
-  const tot = Object.keys(LED2D).reduce(function (a, k) { return a + LED2D[k]; }, 0);
+  return out;
+}
+function renderLedger2D() {
+  var lim = limitOf('2d');
+  // Admin v2.4 am/pm split (Pho Nov 17): two grids, one per session.
+  // The day total (ledSub2d + ledTot2d) is AM + PM and stays combined.
+  var gAm = $('ledGrid2dAm'); if (gAm) gAm.innerHTML = ledGridHtml(LED2D_AM, lim);
+  var gPm = $('ledGrid2dPm'); if (gPm) gPm.innerHTML = ledGridHtml(LED2D_PM, lim);
+  var tAm = totOf(LED2D_AM), tPm = totOf(LED2D_PM), tot = tAm + tPm;
+  const subAm = $('ledSub2dAm'); if (subAm) subAm.textContent = 'မနက်ပိုင်း စုစုပေါင်း ' + fmt(tAm) + ' ကျပ်';
+  const subPm = $('ledSub2dPm'); if (subPm) subPm.textContent = 'ညနေပိုင်း စုစုပေါင်း ' + fmt(tPm) + ' ကျပ်';
   const sub = $('ledSub2d'); if (sub) sub.textContent = 'စုစုပေါင်း ' + fmt(tot) + ' ကျပ်';
   const t2 = $('ledTot2d'); if (t2) t2.textContent = fmt(tot);
 }
@@ -852,10 +879,28 @@ function setBsTab(t) {
   document.querySelectorAll('[data-bs]').forEach(function (b) { b.classList.toggle('on', b.dataset.bs === t); });
   renderBs();
 }
+// One big/small section (Admin v2.4 am/pm split): a heading plus the
+// section's biggest-first list, ranked 1..n within the section.
+function bsSectionHtml(title, list) {
+  var out = '<div class="sec-head">' + esc(title) + '</div>';
+  var sorted = L.sortBsDesc(list || []);
+  if (!sorted.length) { out += '<div class="muted">စာရင်း မရှိသေးဘူး</div>'; return out; }
+  sorted.forEach(function (e, i) {
+    out += '<div class="bs-row"><span><span class="rank">' + (i + 1) + '.</span> <span class="num">' + esc(e.n) + ' = ' + e.v + '</span></span></div>';
+  });
+  return out;
+}
 function renderBs() {
   var w = $('bsList');
   if (!w) return;
   if (bsTab === 'body') { renderBsBody(); return; }
+  if (bsTab === '2d') {
+    // Admin v2.4 am/pm split (Pho Nov 17): two biggest-first lists, one
+    // per session — morning and evening are separate draws and must never
+    // be mixed.
+    w.innerHTML = bsSectionHtml('မနက်ပိုင်း', BS['2dAm'] || []) + bsSectionHtml('ညနေပိုင်း', BS['2dPm'] || []);
+    return;
+  }
   // Parlay (v1.7): earliest leg kickoff first, unknown last; each leg
   // shows its kickoff time. 2D/3D stay biggest-first, untouched.
   var list = bsTab === 'parlay'
@@ -875,6 +920,15 @@ function renderBs() {
 }
 function bsText() {
   if (bsTab === 'body') return bsBodyText();
+  if (bsTab === '2d') {
+    // Admin v2.4 am/pm split: copy carries both sections with headings.
+    var lines = ['2D ကြီးငယ်စာရင်း'];
+    [['မနက်ပိုင်း', BS['2dAm'] || []], ['ညနေပိုင်း', BS['2dPm'] || []]].forEach(function (sec) {
+      lines.push(sec[0] + ':');
+      L.sortBsDesc(sec[1]).forEach(function (e, i) { lines.push((i + 1) + '. ' + e.n + ' = ' + e.v); });
+    });
+    return lines.join('\n');
+  }
   var list = bsTab === 'parlay'
     ? L.sortParlayEntriesByKickoff(BS['parlay'] || [], fxById())
     : L.sortBsDesc(BS[bsTab] || []);
@@ -1412,13 +1466,15 @@ window.saveHedgeSheet = saveHedgeSheet;
 
 // Named exports for Node tests (browser module load ignores them).
 export { timeFromCloseAt, resText, betStatusText, betStatusClass, legLine, fbDetailHtml, nextAccountNumber };
-export { renderAll, renderBets, renderLedger2D, renderLedger3D, renderLedgerFb, renderBs, recomputeFromLive, setBsTab, setLedTab };
+export { renderAll, renderBets, renderLedger2D, renderLedger3D, renderLedgerFb, renderBs, bsText, recomputeFromLive, setBsTab, setLedTab };
 export { ensureAdminDate, setAdminDate, syncAdminDateText, openAdminCal, closeAdminCal, renderAdminCal, adminCalMove, adminCalPick, adminCalQuick };
 // Test hook (Node tests only): replace the live state + aggregates wholesale
 // so the render functions can be exercised without PocketBase.
 export function setTestState(patch) {
   if (patch.state) Object.assign(state, patch.state);
   if (patch.LED2D !== undefined) LED2D = patch.LED2D;
+  if (patch.LED2D_AM !== undefined) LED2D_AM = patch.LED2D_AM;
+  if (patch.LED2D_PM !== undefined) LED2D_PM = patch.LED2D_PM;
   if (patch.LED3D !== undefined) LED3D = patch.LED3D;
   if (patch.LEDFB !== undefined) LEDFB = patch.LEDFB;
   if (patch.BS !== undefined) BS = patch.BS;
