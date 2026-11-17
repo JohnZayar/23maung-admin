@@ -96,6 +96,10 @@
   .mini-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
   .mini-tabs button { flex: 1; border: 1px solid #cbd5e1; background: #fff; border-radius: 10px; padding: 8px; font-size: 14px; font-weight: bold; font-family: inherit; color: #64748b; cursor: pointer; white-space: nowrap; }
   .mini-tabs button.on { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
+  /* 2D period switch (Admin v2.5): small pills — မနက် / ညနေ / နှစ်ခုလုံး. */
+  .per-row { display: flex; gap: 6px; margin-bottom: 8px; }
+  .per-row button { flex: 1; border: 1px solid #cbd5e1; background: #fff; border-radius: 999px; padding: 6px 2px; font-size: 13px; font-weight: bold; font-family: inherit; color: #64748b; cursor: pointer; white-space: nowrap; }
+  .per-row button.on { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
   .net-match { border: 1px solid #e8eef5; border-radius: 12px; padding: 10px 12px; margin-bottom: 9px; background: #fff; box-shadow: 0 1px 5px rgba(30,58,95,.05); }
   .net-match .nm-head { font-weight: bold; font-size: 14px; margin-bottom: 4px; }
   .net-row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; color: #475569; white-space: nowrap; gap: 8px; }
@@ -189,7 +193,7 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.4</span></div>
+<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.5</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
@@ -264,6 +268,7 @@
 <div class="screen" id="scr-bets">
   <div class="acal-row"><button class="acal-btn" onclick="openAdminCal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h2M14 14h2M8 18h2M14 18h2"/></svg><span id="adminDateTextBets"></span></button></div>
   <div class="muted" style="margin-bottom:10px">ယူဆာ တစ်ဦးစီ နှိပ်ပြီး အသေးစိတ် စာရင်း ကြည့်ပါ</div>
+  <div class="per-row"><button data-per="am" onclick="setAdminPeriod('am')">မနက်</button><button data-per="pm" onclick="setAdminPeriod('pm')">ညနေ</button><button data-per="both" onclick="setAdminPeriod('both')">နှစ်ခုလုံး</button></div>
   <div id="betsList">
   <div class="user-card" id="uc1">
     <div class="user-head" onclick="toggleUser('uc1')"><span>User001 <span class="arr">›</span></span><span class="tot">17,000 ကျပ်</span></div>
@@ -337,10 +342,11 @@
   <div class="card" id="ledPane2d">
     <div class="lim-row">လီမစ် (ဂဏန်း တစ်လုံး) <input type="number" id="limLed2d" value="4000" onchange="onLimitChange('2d')"> ကျပ်</div>
     <div class="muted" style="margin-bottom:6px">လီမစ်ကျော်ရင် အနီပေါ်မယ် · <span id="ledSub2d">စုစုပေါင်း 28,000 ကျပ်</span></div>
-    <div class="sec-head">မနက်ပိုင်း · <span id="ledSub2dAm">စုစုပေါင်း 11,500 ကျပ်</span></div>
-    <div class="led-grid" id="ledGrid2dAm"></div>
-    <div class="sec-head">ညနေပိုင်း · <span id="ledSub2dPm">စုစုပေါင်း 16,500 ကျပ်</span></div>
-    <div class="led-grid" id="ledGrid2dPm"></div>
+    <div class="per-row"><button data-per="am" onclick="setAdminPeriod('am')">မနက်</button><button data-per="pm" onclick="setAdminPeriod('pm')">ညနေ</button><button data-per="both" onclick="setAdminPeriod('both')">နှစ်ခုလုံး</button></div>
+    <div id="ledSec2dAm"><div class="sec-head">မနက်ပိုင်း · <span id="ledSub2dAm">စုစုပေါင်း 11,500 ကျပ်</span></div>
+    <div class="led-grid" id="ledGrid2dAm"></div></div>
+    <div id="ledSec2dPm"><div class="sec-head">ညနေပိုင်း · <span id="ledSub2dPm">စုစုပေါင်း 16,500 ကျပ်</span></div>
+    <div class="led-grid" id="ledGrid2dPm"></div></div>
   </div>
   <div class="card" id="ledPane3d" style="display:none">
     <div class="lim-row">လီမစ် (ဂဏန်း တစ်လုံး) <input type="number" id="limLed3d" value="4000" onchange="onLimitChange('3d')"> ကျပ်</div>
@@ -364,6 +370,7 @@
     <button data-bs="parlay" onclick="setBsTab('parlay')">မောင်းစာရင်း</button>
   </div></div>
   <div class="muted" style="margin-bottom:10px">အကြီးဆုံး (ငွေအများဆုံး) ကနေ အစဉ်လိုက် — ကော်ပီကူးလို့ရတယ်</div>
+  <div class="per-row" id="perRowBs"><button data-per="am" onclick="setAdminPeriod('am')">မနက်</button><button data-per="pm" onclick="setAdminPeriod('pm')">ညနေ</button><button data-per="both" onclick="setAdminPeriod('both')">နှစ်ခုလုံး</button></div>
   <div class="card" id="bsList"></div>
   <button class="btn-navy" onclick="copyBs()">📋 ကော်ပီကူးမယ်</button>
 </div>
@@ -477,6 +484,6 @@
 <!-- record date picker calendar popup (Admin v2.3) -->
 <div id="adminCalOverlay" onclick="if(event.target===this)closeAdminCal()"><div class="acal-card" id="adminCalCard"></div></div>
 
-<script type="module" src="admin.js?v=2.4"></script>
+<script type="module" src="admin.js?v=2.5"></script>
 </body>
 </html>
