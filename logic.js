@@ -790,11 +790,14 @@ export function footballDailyDetail(bet, fixturesById, settings) {
     });
     gross = anyLoss ? -stake : stake * prod - stake;
   } else {
+    // Gross (pre-commission) result per Pho Nov 17: a full win's gross is
+    // the full stake; a boundary win/loss is the pyar amount; a full loss
+    // is the full stake. Net (r.profit) already applies the 5% on wins.
     r.legs.forEach(function (l) {
       const st = l.stake || 0;
-      if (l.res === 'win') gross += st * (l.pyar || 0) / 100;
-      else if (l.res === 'halfWin') gross += (st / 2) * (l.pyar || 0) / 100;
-      else if (l.res === 'halfLoss') gross -= st / 2;
+      if (l.res === 'win') gross += st;
+      else if (l.res === 'halfWin') gross += st * (l.pyar || 0) / 100;
+      else if (l.res === 'halfLoss') gross -= st * (l.pyar || 0) / 100;
       else if (l.res === 'loss') gross -= st;
     });
   }
@@ -858,10 +861,15 @@ export function settleHedge(h, fixturesByApiId) {
   }
   const r = settleLeg(leg, fx);
   if (!r) return null;
+  // Pho Nov 17 14:14: hedges settle EXACTLY like player bets (အထိုးအကန်
+  // အစား အကုန် အဲ့လိုပဲ) — the same main-line rule, so the same gross:
+  // full win = full amount, pyar win = amount x pyar/100, pyar loss =
+  // -amount x pyar/100, full loss = -amount, push = 0. (The 1.5% rebate
+  // is NOT here — hedgeDailyResult applies win x0.965 / loss x0.985.)
   let gross = 0;
-  if (r.res === 'win') gross = amount * (r.pyar || 0) / 100;
-  else if (r.res === 'halfWin') gross = (amount / 2) * (r.pyar || 0) / 100;
-  else if (r.res === 'halfLoss') gross = -amount / 2;
+  if (r.res === 'win') gross = amount;
+  else if (r.res === 'halfWin') gross = amount * (r.pyar || 0) / 100;
+  else if (r.res === 'halfLoss') gross = -amount * (r.pyar || 0) / 100;
   else if (r.res === 'loss') gross = -amount;
   return { res: r.res, pyar: r.pyar || 0, gross: gross };
 }
@@ -897,6 +905,10 @@ export function cellClass(v, lim, blocked) {
 }
 
 // ---- Parlay -----------------------------------------------------------------
+// NOTE (Pho Nov 17): parlay commission (comm_23/47/810 in m23_settings) no
+// longer affects parlays — parlays now pay from the balanced table below.
+// parlayCommission is kept (exported) only because Admin Settings still
+// reads/writes those fields; it is no longer called by parlayPayout.
 export function parlayCommission(nLegs, settings) {
   const s = settings || {};
   if (nLegs <= 3) return (s.comm_23 !== undefined ? s.comm_23 : 15);
@@ -915,59 +927,128 @@ export function legFactor(res, pyar) {
   return 0; // 'loss' (or unset) — parlayPayout short-circuits on loss anyway
 }
 
+// Balanced parlay table (Pho Nov 17, APPROVED): pay a LITTLE MORE than the
+// outside paper bookie's printed sheet, balanced across every draw cell.
+// The old formula (legs x2, then 15/20/30% commission) paid far above the
+// sheet at high legs (8 legs: 179.2x vs sheet 100x) — no commission tier
+// could fix that (matching the sheet by formula would need ~57% at 7-8
+// legs). The table IS the net return multiplier (stake included).
+// All-win multipliers by legs (sheet 4-8 legs: 13/21/32/50/100, +~10%):
+const PARLAY_ALLWIN = { 2: 3.5, 3: 7, 4: 14, 5: 23, 6: 35, 7: 55, 8: 110, 9: 200, 10: 350 };
+// Draw rows, legs 4-8, draws 1-4 (sheet values x1.1, cleaned to .5 steps):
+//   1 draw:  5/10/16/30/40  -> 5.5/11/18/33/44
+//   2 draws: 2/4/6/12/22    -> 2.5/4.5/7/13.5/24.5
+//   3 draws: -/3/4/7/12     -> 2/3.5/4.5/8/13.5 (4 legs: no sheet value, 2x)
+//   4 draws: -/1/2/7/8      -> 1/1.1/2.5/8/9 (4 legs all-push: stake back)
+const PARLAY_DRAWS = {
+  4: { 1: 5.5, 2: 2.5, 3: 2, 4: 1 },
+  5: { 1: 11, 2: 4.5, 3: 3.5, 4: 1.1 },
+  6: { 1: 18, 2: 7, 3: 4.5, 4: 2.5 },
+  7: { 1: 33, 2: 13.5, 3: 8, 4: 8 },
+  8: { 1: 44, 2: 24.5, 3: 13.5, 4: 9 }
+};
+
+// Table multiplier for n legs with d pushes. Outside the printed rows
+// (2-3 / 9-10 legs, or 5+ draws) the all-win value halves per draw,
+// floored at 1x (stake back).
+export function parlayTableMult(nLegs, nDraws) {
+  const row = PARLAY_DRAWS[nLegs];
+  if (row && row[nDraws] !== undefined) return row[nDraws];
+  const base = PARLAY_ALLWIN[nLegs];
+  if (base === undefined) return 1;
+  return Math.max(1, base / Math.pow(2, nDraws));
+}
+
 export function parlayPayout(stake, legs, settings) {
   const ls = legs || [];
   if (!ls.length) return 0;
+  let draws = 0;
+  let scale = 1;
   for (let i = 0; i < ls.length; i++) {
-    if (ls[i].res === 'loss') return 0;
+    const l = ls[i];
+    if (l.res === 'loss') return 0;
+    if (l.res === 'push') { draws++; continue; }
+    scale *= legFactor(l.res, l.pyar) / 2;
   }
-  let prod = 1;
-  ls.forEach(function (l) { prod *= legFactor(l.res, l.pyar); });
-  const comm = parlayCommission(ls.length, settings);
-  return Math.round(stake * prod * (1 - comm / 100));
+  return Math.round(stake * parlayTableMult(ls.length, draws) * scale);
 }
 
 // ---- Football leg settlement ------------------------------------------------
 // pyar is stored as HUNDREDTHS of the line fraction (line -1.25 -> pyar 25,
 // line 1.45 -> pyar 45, line -1.5 -> pyar 50). The displayed Myanmar string
 // shows the same digits (".5" renders as "5"); the math needs hundredths.
-// For a full win this is also the body profit rate (schema: 1+45 -> 1000 wins 450).
+// CORRECTED (Pho Nov 17): the pyar is the BOUNDARY (ပြားစွန်းး) amount
+// ONLY — at the exact boundary the line's side wins/loses stake*pyar/100.
+// A full win pays the FULL stake as profit (5% off), NOT the pyar rate:
+// the old reading "1+45 -> 1000 wins 450" applied the pyar to EVERY win
+// and was wrong.
 export function pyarFromLine(line) {
   return Math.round((Math.abs(line) % 1) * 100);
 }
 
-// Evaluate one Asian-handicap / goal-line leg.
+// Evaluate one Asian-handicap leg (BODY only).
 // `line` is the raw API line, `margin` is the score difference the line
 // applies to (body pick h: hg-ag with line ah_line; body pick a: ag-hg with
-// line -ah_line; goal over: total with line gl_line; goal under: -total
-// with line gl_line). adj = margin + line: >0 win, =0 push, <0 loss.
-// Quarter lines (.25/.75) split into two half-lines (line +/- 0.25):
-//   both win -> win, both loss -> loss, both push -> push,
-//   win+push -> halfWin, loss+push -> halfLoss.
-// (win+loss cannot occur: the halves differ by 0.5 and margins are integers.)
+// line -ah_line). adj = margin + line: >0 win, =0 push, <0 loss.
+// CORRECTED (Pho Nov 17 — "စျေးဖွင့်တဲ့ မိန်း ၁ဂိုး ၂ဂိုး ကိုတည်ရမှာပြီးမှ
+// ပြားယူ"): the MAIN line (the integer part, 1 or 2 goals) is the base;
+// the pyar applies ONLY when the result lands exactly ON the main, IN
+// THE LINE'S DIRECTION (line < 0 -> margin == +main; line > 0 -> margin
+// == -main). If the result deviates from the main, it is a FULL win /
+// FULL loss — no pyar, whatever the fraction is (.25/.5/.75 alike). The
+// fraction sets only the pyar AMOUNT. Which side wins the pyar is decided
+// by the LINE SIGN: line < 0 -> the pick wins it (halfWin), line > 0 ->
+// the pick loses it (halfLoss).
+// (This replaces the old quarter-split: a 1.75 line winning by 2 is a FULL
+// win, not a pyar loss; a 1.5 line winning by 1 is a pyar win, not a loss.)
+// NOTE: evalLine is for BODY legs only. Goal-total legs use evalGoalLine
+// below — a goal total is always positive, so its pyar case is
+// total == main and its win/loss compares total to |gl_line|; routing a
+// goal leg through the evalLine sign-flip would make a NEGATIVE goal line
+// ("3-45") always win for the over. Do NOT route goal legs through here.
 export function evalLine(line, margin) {
   const pyar = pyarFromLine(line);
   const frac = Math.abs(line) % 1;
-  const isQuarter = Math.abs(frac - 0.25) < 1e-9 || Math.abs(frac - 0.75) < 1e-9;
-  function outcome(adj) { return adj > 0 ? 'win' : adj < 0 ? 'loss' : 'push'; }
-  if (!isQuarter) {
-    return { res: outcome(margin + line), pyar: pyar };
+  const main = Math.trunc(Math.abs(line));
+  const adj = margin + line;
+  if (frac > 0) {
+    const pyarMargin = line < 0 ? main : -main;
+    if (margin === pyarMargin) {
+      return { res: line < 0 ? 'halfWin' : 'halfLoss', pyar: pyar };
+    }
   }
-  const o1 = outcome(margin + line - 0.25);
-  const o2 = outcome(margin + line + 0.25);
-  if (o1 === 'win' && o2 === 'win') return { res: 'win', pyar: pyar };
-  if (o1 === 'loss' && o2 === 'loss') return { res: 'loss', pyar: pyar };
-  if (o1 === 'push' && o2 === 'push') return { res: 'push', pyar: pyar };
-  if ((o1 === 'win' && o2 === 'push') || (o1 === 'push' && o2 === 'win')) return { res: 'halfWin', pyar: pyar };
-  if ((o1 === 'loss' && o2 === 'push') || (o1 === 'push' && o2 === 'loss')) return { res: 'halfLoss', pyar: pyar };
-  return { res: 'push', pyar: pyar }; // win+loss: settles as a push
+  return { res: adj > 0 ? 'win' : adj < 0 ? 'loss' : 'push', pyar: pyar };
+}
+
+// Goal-total evaluation (Pho Nov 17, "3-45" example). A goal line's sign
+// is the pyar direction: "+" line (e.g. 2+25) -> the OVER wins the pyar
+// at the main; "-" line (e.g. 3-45, "3 goals, 45 lose") -> the OVER LOSES
+// the pyar at the main and the UNDER wins it. Away from the main the
+// over/under is decided by total vs |gl_line|.
+export function evalGoalLine(glLine, total, pick) {
+  const g = Math.abs(glLine);
+  const frac = g % 1;
+  const main = Math.trunc(g);
+  const pyar = Math.round(frac * 100);
+  if (frac > 0 && total === main) {
+    const overWinsPyar = glLine > 0;
+    const won = pick === 'over' ? overWinsPyar : !overWinsPyar;
+    return { res: won ? 'halfWin' : 'halfLoss', pyar: pyar };
+  }
+  if (total > g) return { res: pick === 'over' ? 'win' : 'loss', pyar: pyar };
+  if (total < g) return { res: pick === 'over' ? 'loss' : 'win', pyar: pyar };
+  return { res: 'push', pyar: pyar };
 }
 
 // Settle one leg against a finished fixture. Returns null when the fixture
 // is not finished (scores missing) — the bet stays open.
-// SETTLED (Pho Nov 13 12:44): body commission IS deducted — 5% on the PROFIT
-// of every body bet (no big/small distinction; body_comm_small unused).
-// The stake is returned in full; only the pyar profit is reduced by 5%.
+// SETTLED (Pho Nov 13 12:44, CORRECTED Nov 17): body commission IS
+// deducted — 5% on the PROFIT of every body bet (no big/small distinction;
+// body_comm_small unused). The 5% applies to WINS only, never to losses.
+// The stake is returned in full on a win; a boundary loss charges the
+// pyar with NO commission; and the stake was already deducted when the bet
+// was placed, so settlement only ever ADDS the payout back — a loss never
+// deducts again (Pho Nov 17, "123 အကုန်").
 export function settleLeg(leg, fixture) {
   if (!fixture || fixture.status !== 'finished') return null;
   const hg = fixture.home_goals;
@@ -984,19 +1065,23 @@ export function settleLeg(leg, fixture) {
     const line = leg.gl_line;
     if (line === null || line === undefined) return null;
     const total = hg + ag;
-    // Over wins when total > gl_line, i.e. total + (-gl_line) > 0, so the
-    // line enters evalLine negated; under wins when gl_line - total > 0.
-    if (leg.pick === 'over') return evalLine(-line, total);
-    if (leg.pick === 'under') return evalLine(line, -total);
+    // Goal legs use evalGoalLine, NOT the evalLine sign-flip: a goal
+    // total is always positive, and a negative goal line ("3-45") must
+    // still lose for the over below the main.
+    if (leg.pick === 'over') return evalGoalLine(line, total, 'over');
+    if (leg.pick === 'under') return evalGoalLine(line, total, 'under');
     return null;
   }
   return null;
 }
 
-// Body settlement (per-leg pyar math, 5% commission on the PROFIT only —
-// Pho Nov 13: everything 5%, no big/small): win -> stake +
-// stake*pyar/100*0.95; halfWin -> stake + (stake/2)*pyar/100*0.95;
-// halfLoss -> stake/2; push -> stake; loss -> 0.
+// Body settlement (Pho Nov 17, confirmed by his numbers): 5% commission
+// on WINS only, never on losses; the stake was already deducted when the
+// bet was placed, so the payout is the amount credited BACK (a loss never
+// deducts again). win -> stake + stake*0.95 (full win: profit = full
+// stake); halfWin -> stake + stake*pyar/100*0.95 (boundary win: profit =
+// pyar amount); halfLoss -> stake - stake*pyar/100 (boundary loss: lose
+// the pyar, NO commission); push -> stake; loss -> 0.
 export function settleBodyBet(bet, fixturesById, settings) {
   const legs = (bet.legs || []).map(function (leg) {
     const fx = fixturesById[leg.fixture];
@@ -1012,9 +1097,9 @@ export function settleBodyBet(bet, fixturesById, settings) {
   let payout = 0;
   legs.forEach(function (l) {
     const st = l.stake || 0;
-    if (l.res === 'win') payout += st + st * (l.pyar || 0) / 100 * keep;
-    else if (l.res === 'halfWin') payout += st + (st / 2) * (l.pyar || 0) / 100 * keep;
-    else if (l.res === 'halfLoss') payout += st / 2;
+    if (l.res === 'win') payout += st + st * keep;
+    else if (l.res === 'halfWin') payout += st + st * (l.pyar || 0) / 100 * keep;
+    else if (l.res === 'halfLoss') payout += st - st * (l.pyar || 0) / 100;
     else if (l.res === 'push') payout += st;
   });
   payout = Math.round(payout);
