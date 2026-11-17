@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.1';
+import * as L from './logic.js?v=2.3';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -19,7 +19,9 @@ const state = {
   fixtures: [],        // m23_fixtures
   txs: [],             // m23_wallet_tx (summary only)
   hedges: [],          // m23_hedges (Admin v1.6)
-  hedgeByMatch: {}     // match key -> {body, goal} hedge rows
+  hedgeByMatch: {},   // match key -> {body, goal} hedge rows
+  adminDate: null,    // record date picker (Admin v2.3): 'YYYY-MM-DD' Yangon; null until set
+  adminCalView: null  // calendar popup viewed month {y, m} (m 0-based)
 };
 
 // Mockup sample data (kept as the pre-login / offline fallback).
@@ -184,6 +186,7 @@ async function loadAll(quiet) {
     catch (e2) { state.hedges = []; }
     state.loaded = true;
     fillWinInputs();
+    ensureAdminDate();
     recomputeFromLive();
     renderAll();
     startAutoRefresh();
@@ -196,25 +199,30 @@ async function loadAll(quiet) {
   }
 }
 
-// Recompute every mockup aggregate from the live bet rows.
+// Recompute every mockup aggregate from the live bet rows — for the
+// SELECTED record date only (Admin v2.3 date picker). 2D/3D bets resolve
+// their date from their session, football bets from `created`
+// (L.adminBetDate); a bet whose date cannot be resolved is SHOWN, never
+// hidden. The chosen date survives the 30s auto-refresh: loadAll re-runs
+// this with state.adminDate untouched (ensureAdminDate only sets it once).
 function recomputeFromLive() {
-  const cur2d = latestSession('2d');
-  const cur3d = latestSession('3d');
-  const b2 = cur2d ? state.bets2d.filter(function (b) { return b.session === cur2d.id; }) : state.bets2d;
-  const b3 = cur3d ? state.bets3d.filter(function (b) { return b.session === cur3d.id; }) : state.bets3d;
+  const d = ensureAdminDate();
+  const b2 = L.filterBetsByDate(state.bets2d, state.sessions, '2d', d);
+  const b3 = L.filterBetsByDate(state.bets3d, state.sessions, '3d', d);
+  const bf = L.filterBetsByDate(state.betsFb, state.sessions, 'fb', d);
   LED2D = L.aggregate2D(b2);
   LED3D = L.aggregate3D(b3);
-  LEDFB = state.betsFb.map(function (b) {
+  LEDFB = bf.map(function (b) {
     return { user: playerName(b.player), what: fbBetLabel(b), amt: b.stake || b.total || 0, bet: b };
   });
   BS = {
-    '2d': L.bsEntriesFromTotals(L.aggregate2D(state.bets2d)),
-    '3d': L.bsEntriesFromTotals(L.aggregate3D(state.bets3d)),
-    'parlay': L.sortBsDesc(state.betsFb.filter(function (b) { return b.type === 'parlay'; }).map(function (b) {
+    '2d': L.bsEntriesFromTotals(LED2D),
+    '3d': L.bsEntriesFromTotals(LED3D),
+    'parlay': L.sortBsDesc(bf.filter(function (b) { return b.type === 'parlay'; }).map(function (b) {
       return { n: playerName(b.player) + ' — မောင်း ' + (b.legs || []).length + ' ပွဲ', v: b.stake || 0, bet: b };
     }))
   };
-  BODY_NET = L.computeBodyNet(state.betsFb, fxById());
+  BODY_NET = L.computeBodyNet(bf, fxById());
   state.hedgeByMatch = L.indexHedgesByMatch(state.hedges, state.fixtures);
   const pend = state.requests.filter(function (r) { return r.status === 'pending'; });
   pendIn = pend.filter(function (r) { return r.kind === 'topup'; }).length;
@@ -317,12 +325,103 @@ function fbDetailHtml(b, withTime, fixturesById) {
 }
 
 function renderAll() {
+  syncAdminDateText();
   renderRequests();
   renderBets();
   renderLedger2D(); renderLedger3D(); renderLedgerFb();
   renderBs(); renderBlocked(); updPend();
   renderDashboard(); renderSummary(); renderResults(); renderSettings(); renderHomeSessions();
   syncLimitInputs();
+}
+
+// ---------------------------------------------------------------- record date picker (Admin v2.3)
+// MOUNG556-style calendar popup, SAME design as Player v2.10's voucher
+// calendar (openVouchCal/renderVouchCal there): a calendar icon button +
+// selected-date text in the top bar of EACH record screen (လယ်ဂျာ / ကြီးငယ် /
+// လောင်းကစား), tap opens the month-view popup. ONE shared date state across
+// all three screens; default = today (Yangon); the chosen date survives the
+// 30s auto-refresh (ensureAdminDate only sets it once). Settings are NOT
+// filtered: limit input, close times, blocked numbers stay as they are.
+// scr-res (ရလဒ်) and scr-summary (စာရင်းချုပ်) have NO picker (out of scope).
+var CAL_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function ensureAdminDate() {
+  if (!state.adminDate) state.adminDate = todayYgn();
+  return state.adminDate;
+}
+function syncAdminDateText() {
+  const txt = state.adminDate ? L.fmtDateOnly(state.adminDate) : '';
+  ['adminDateTextLedger', 'adminDateTextBs', 'adminDateTextBets'].forEach(function (id) {
+    const el = $(id);
+    if (el) el.textContent = txt;
+  });
+}
+function setAdminDate(ymd) {
+  if (typeof ymd !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return;
+  state.adminDate = ymd;
+  syncAdminDateText();
+  if (state.loaded) recomputeFromLive();
+  renderAll();
+}
+function renderAdminCal() {
+  const card = $('adminCalCard');
+  if (!card) return;
+  const today = todayYgn();
+  const ty = parseInt(today.slice(0, 4), 10), tm = parseInt(today.slice(5, 7), 10) - 1;
+  const view = state.adminCalView || { y: ty, m: tm };
+  const isCur = (view.y === ty && view.m === tm);
+  const cells = L.calCells(view.y, view.m, today, state.adminDate);
+  var h = '<div class="acal-nav">'
+    + '<button onclick="adminCalMove(-1)" aria-label="prev month">‹</button>'
+    + '<div class="acal-title">' + CAL_MONTHS[view.m] + ' &nbsp; ' + view.y + '</div>'
+    + '<button onclick="adminCalMove(1)"' + (isCur ? ' disabled' : '') + ' aria-label="next month">›</button>'
+    + '</div>';
+  h += '<div class="acal-grid">' + ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(function (d) { return '<div class="acal-dow">' + d + '</div>'; }).join('') + '</div>';
+  h += '<div class="acal-grid">';
+  cells.forEach(function (c) {
+    if (!c) { h += '<div></div>'; return; }
+    var cls = 'acal-day';
+    if (c.we) cls += ' cal-we';
+    if (c.future) cls += ' cal-future';
+    if (c.today) cls += ' cal-today';
+    if (c.sel && !c.today) cls += ' cal-sel';
+    if (c.future) h += '<div class="' + cls + '">' + c.d + '</div>';
+    else h += '<div class="' + cls + '" onclick="adminCalPick(\'' + c.ymd + '\')">' + c.d + '</div>';
+  });
+  h += '</div>';
+  h += '<div class="acal-quick"><button onclick="adminCalQuick(\'yesterday\')">Yesterday</button><button onclick="adminCalQuick(\'today\')">Today</button></div>';
+  card.innerHTML = h;
+}
+function openAdminCal() {
+  ensureAdminDate();
+  const sel = state.adminDate || todayYgn();
+  state.adminCalView = { y: parseInt(sel.slice(0, 4), 10), m: parseInt(sel.slice(5, 7), 10) - 1 };
+  renderAdminCal();
+  const ov = $('adminCalOverlay');
+  if (ov) ov.style.display = 'flex';
+}
+function closeAdminCal() {
+  const ov = $('adminCalOverlay');
+  if (ov) ov.style.display = 'none';
+}
+function adminCalMove(dir) {
+  const today = todayYgn();
+  const view = state.adminCalView || { y: parseInt(today.slice(0, 4), 10), m: parseInt(today.slice(5, 7), 10) - 1 };
+  var m = view.m + dir, y = view.y;
+  if (m < 0) { m = 11; y--; }
+  if (m > 11) { m = 0; y++; }
+  // Never into a future month beyond the current month.
+  const ty = parseInt(today.slice(0, 4), 10), tm = parseInt(today.slice(5, 7), 10) - 1;
+  if (y > ty || (y === ty && m > tm)) return;
+  state.adminCalView = { y: y, m: m };
+  renderAdminCal();
+}
+function adminCalPick(ymd) {
+  setAdminDate(ymd);
+  closeAdminCal();
+}
+function adminCalQuick(which) {
+  const today = todayYgn();
+  adminCalPick(which === 'yesterday' ? L.ymdAdd(today, -1) : today);
 }
 
 // ---------------------------------------------------------------- requests
@@ -489,11 +588,12 @@ async function createPlayer() {
 // ---------------------------------------------------------------- bets tab
 function renderBets() {
   if (!state.loaded) return; // keep the mockup's three sample user cards
+  const d = ensureAdminDate();
   const wrap = $('betsList');
   const rows = state.players.map(function (p) {
-    const b2 = state.bets2d.filter(function (b) { return b.player === p.id; });
-    const b3 = state.bets3d.filter(function (b) { return b.player === p.id; });
-    const bf = state.betsFb.filter(function (b) { return b.player === p.id; });
+    const b2 = state.bets2d.filter(function (b) { return b.player === p.id && L.betMatchesDate(b, state.sessions, '2d', d); });
+    const b3 = state.bets3d.filter(function (b) { return b.player === p.id && L.betMatchesDate(b, state.sessions, '3d', d); });
+    const bf = state.betsFb.filter(function (b) { return b.player === p.id && L.betMatchesDate(b, state.sessions, 'fb', d); });
     const total = b2.reduce(function (a, b) { return a + (b.total || 0); }, 0) +
       b3.reduce(function (a, b) { return a + (b.total || 0); }, 0) +
       bf.reduce(function (a, b) { return a + (b.stake || 0); }, 0);
@@ -505,7 +605,10 @@ function renderBets() {
           ? b.lines.map(function (ln) { return ln.n + (ln.rev ? ' (အာ ' + L.reverse2(ln.n) + ')' : ''); }).join(' · ')
           : fbBetLabel(b);
         const amt = b.lines ? (b.total || 0) : (b.stake || 0);
-        var row = '<div class="bet-row"><span class="what">' + esc(what) + '</span><span class="amt">' + fmt(amt) + ' ကျပ်</span></div>';
+        // 'wrap': the numbers MUST wrap to multiple lines — the old
+        // .bet-row .what ellipsis ('...') hid real bets Pho could not see.
+        // No truncation anywhere in this detail: every number is shown.
+        var row = '<div class="bet-row wrap"><span class="what">' + esc(what) + '</span><span class="amt">' + fmt(amt) + ' ကျပ်</span></div>';
         if (!b.lines) {
           // Football bet: status + one line per leg (match, pick, odds, outcome).
           const det = fbDetailHtml(b);
@@ -1261,6 +1364,8 @@ async function saveSettings() {
 }
 
 // ---------------------------------------------------------------- init
+ensureAdminDate();
+syncAdminDateText();
 renderBs();
 renderBlocked();
 renderLedger2D(); renderLedger3D(); renderLedgerFb();
@@ -1296,9 +1401,27 @@ window.copyFbSum = copyFbSum;
 window.openHedgeSheet = openHedgeSheet;
 window.toastKickoffPassed = toastKickoffPassed;
 window.closeHedgeSheet = closeHedgeSheet;
+window.openAdminCal = openAdminCal;
+window.closeAdminCal = closeAdminCal;
+window.adminCalMove = adminCalMove;
+window.adminCalPick = adminCalPick;
+window.adminCalQuick = adminCalQuick;
 window.hedgeAllIn = hedgeAllIn;
 window.updateHedgeRemain = updateHedgeRemain;
 window.saveHedgeSheet = saveHedgeSheet;
 
 // Named exports for Node tests (browser module load ignores them).
 export { timeFromCloseAt, resText, betStatusText, betStatusClass, legLine, fbDetailHtml, nextAccountNumber };
+export { renderAll, renderBets, renderLedger2D, renderLedger3D, renderLedgerFb, renderBs, recomputeFromLive, setBsTab, setLedTab };
+export { ensureAdminDate, setAdminDate, syncAdminDateText, openAdminCal, closeAdminCal, renderAdminCal, adminCalMove, adminCalPick, adminCalQuick };
+// Test hook (Node tests only): replace the live state + aggregates wholesale
+// so the render functions can be exercised without PocketBase.
+export function setTestState(patch) {
+  if (patch.state) Object.assign(state, patch.state);
+  if (patch.LED2D !== undefined) LED2D = patch.LED2D;
+  if (patch.LED3D !== undefined) LED3D = patch.LED3D;
+  if (patch.LEDFB !== undefined) LEDFB = patch.LEDFB;
+  if (patch.BS !== undefined) BS = patch.BS;
+  if (patch.BODY_NET !== undefined) BODY_NET = patch.BODY_NET;
+}
+export function getTestState() { return state; }
