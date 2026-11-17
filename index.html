@@ -109,6 +109,7 @@
   .bs-row .rank { color: #64748b; width: 26px; }
   .bs-row .num { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .bs-row .amt { font-weight: bold; color: #1e3a5f; white-space: nowrap; flex-shrink: 0; }
+  .sec-head { font-size: 15px; font-weight: bold; color: #1e3a5f; margin: 10px 0 4px; }
   .fb-bet { border-bottom: 1px solid #f1f5f9; padding-bottom: 5px; margin-bottom: 5px; }
   .fb-bet:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
   .fb-bet .bet-row, .fb-bet .bs-row { border-bottom: none; padding-bottom: 1px; }
@@ -188,7 +189,7 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.3</span></div>
+<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.4</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
@@ -336,7 +337,10 @@
   <div class="card" id="ledPane2d">
     <div class="lim-row">လီမစ် (ဂဏန်း တစ်လုံး) <input type="number" id="limLed2d" value="4000" onchange="onLimitChange('2d')"> ကျပ်</div>
     <div class="muted" style="margin-bottom:6px">လီမစ်ကျော်ရင် အနီပေါ်မယ် · <span id="ledSub2d">စုစုပေါင်း 28,000 ကျပ်</span></div>
-    <div class="led-grid" id="ledGrid2d"></div>
+    <div class="sec-head">မနက်ပိုင်း · <span id="ledSub2dAm">စုစုပေါင်း 11,500 ကျပ်</span></div>
+    <div class="led-grid" id="ledGrid2dAm"></div>
+    <div class="sec-head">ညနေပိုင်း · <span id="ledSub2dPm">စုစုပေါင်း 16,500 ကျပ်</span></div>
+    <div class="led-grid" id="ledGrid2dPm"></div>
   </div>
   <div class="card" id="ledPane3d" style="display:none">
     <div class="lim-row">လီမစ် (ဂဏန်း တစ်လုံး) <input type="number" id="limLed3d" value="4000" onchange="onLimitChange('3d')"> ကျပ်</div>
@@ -473,6 +477,6 @@
 <!-- record date picker calendar popup (Admin v2.3) -->
 <div id="adminCalOverlay" onclick="if(event.target===this)closeAdminCal()"><div class="acal-card" id="adminCalCard"></div></div>
 
-<script type="module" src="admin.js?v=2.3"></script>
+<script type="module" src="admin.js?v=2.4"></script>
 </body>
 </html>
