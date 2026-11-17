@@ -150,6 +150,29 @@
   .fs-head { font-size: 15px; font-weight: bold; color: #1e3a5f; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 2px solid #1e3a5f; }
   .fs-name { font-weight: bold; font-size: 14px; margin: 8px 0 2px; }
   .fs-line { font-family: monospace; font-size: 13px; padding: 1px 0 1px 10px; }
+  /* ---- record date picker (Admin v2.3, same design as Player v2.10) ---- */
+  .acal-row { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+  .acal-btn { display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 6px 10px; font-size: 14px; font-weight: 600; color: #1e293b; font-family: inherit; cursor: pointer; white-space: nowrap; box-shadow: 0 2px 10px rgba(30,58,95,.08); }
+  .acal-btn svg { width: 18px; height: 18px; flex: none; }
+  #adminCalOverlay { position: fixed; inset: 0; background: rgba(15,23,42,.5); z-index: 300; display: none; align-items: flex-start; justify-content: center; padding: 28px 16px; }
+  .acal-card { background: #fff; border-radius: 16px; width: 100%; max-width: 340px; padding: 18px 16px 16px; box-shadow: 0 12px 32px rgba(15,23,42,.25); }
+  .acal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .acal-nav button { background: none; border: none; font-size: 24px; line-height: 1; color: #334155; cursor: pointer; padding: 2px 12px; font-family: inherit; }
+  .acal-nav button:disabled { color: #cbd5e1; cursor: default; }
+  .acal-title { font-size: 19px; color: #475569; font-weight: 500; }
+  .acal-grid { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; }
+  .acal-dow { color: #b6bec9; font-size: 15px; padding: 8px 0; }
+  .acal-day { width: 40px; height: 40px; margin: 0 auto; display: flex; align-items: center; justify-content: center; font-size: 17px; color: #1e293b; cursor: pointer; border-radius: 50%; }
+  .acal-day.cal-we { color: #d92b2b; }
+  .acal-day.cal-future { color: #cbd5e1; cursor: default; }
+  .acal-day.cal-today { background: #d92b2b; color: #fff; }
+  .acal-day.cal-sel { box-shadow: inset 0 0 0 2px #d92b2b; }
+  .acal-quick { display: flex; gap: 12px; margin-top: 16px; }
+  .acal-quick button { flex: 1; background: #8a8f98; color: #fff; border: none; border-radius: 8px; padding: 12px 0; font-size: 17px; font-family: inherit; cursor: pointer; }
+  /* bets detail: full numbers, never truncated (Admin v2.3) — the old
+     .bet-row .what ellipsis hid real bets behind '...'. Wrap instead. */
+  .bet-row.wrap { align-items: flex-start; }
+  .bet-row.wrap .what { white-space: normal; overflow: visible; text-overflow: clip; word-break: break-word; }
 </style>
 </head>
 <body>
@@ -165,7 +188,7 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.2</span></div>
+<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.3</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
@@ -238,6 +261,7 @@
 
 <!-- bets -->
 <div class="screen" id="scr-bets">
+  <div class="acal-row"><button class="acal-btn" onclick="openAdminCal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h2M14 14h2M8 18h2M14 18h2"/></svg><span id="adminDateTextBets"></span></button></div>
   <div class="muted" style="margin-bottom:10px">ယူဆာ တစ်ဦးစီ နှိပ်ပြီး အသေးစိတ် စာရင်း ကြည့်ပါ</div>
   <div id="betsList">
   <div class="user-card" id="uc1">
@@ -297,6 +321,7 @@
 
 <!-- ledger -->
 <div class="screen" id="scr-ledger">
+  <div class="acal-row"><button class="acal-btn" onclick="openAdminCal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h2M14 14h2M8 18h2M14 18h2"/></svg><span id="adminDateTextLedger"></span></button></div>
   <div class="stats">
     <div class="stat"><b id="ledTot2d">28,000</b><span>2D စုစုပေါင်း</span></div>
     <div class="stat"><b id="ledTot3d">7,000</b><span>3D စုစုပေါင်း</span></div>
@@ -327,6 +352,7 @@
 
 <!-- bigsmall -->
 <div class="screen" id="scr-bigsmall">
+  <div class="acal-row"><button class="acal-btn" onclick="openAdminCal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h2M14 14h2M8 18h2M14 18h2"/></svg><span id="adminDateTextBs"></span></button></div>
   <div class="card" style="padding:0;overflow:hidden"><div class="tabs" style="margin:0">
     <button class="on" data-bs="2d" onclick="setBsTab('2d')">2D စာရင်း</button>
     <button data-bs="3d" onclick="setBsTab('3d')">3D စာရင်း</button>
@@ -444,6 +470,9 @@
   <datalist id="bookieList"></datalist>
 </div>
 
-<script type="module" src="admin.js?v=2.2"></script>
+<!-- record date picker calendar popup (Admin v2.3) -->
+<div id="adminCalOverlay" onclick="if(event.target===this)closeAdminCal()"><div class="acal-card" id="adminCalCard"></div></div>
+
+<script type="module" src="admin.js?v=2.3"></script>
 </body>
 </html>
