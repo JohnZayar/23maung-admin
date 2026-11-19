@@ -193,29 +193,31 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.8</span></div>
+<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.9</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
   <div class="stats">
-    <div class="stat warn"><b id="stPend">3</b><span>အတည်ပြုရန် ကျန်</span></div>
-    <div class="stat"><b id="stBets">12</b><span>ဒီနေ့ လောင်းကစား</span></div>
-    <div class="stat"><b id="stPlayers">48</b><span>ကစားသမား စုစုပေါင်း</span></div>
-    <div class="stat"><b id="stStake">1,240,000</b><span>ဒီနေ့ ထိုးငွေ (ကျပ်)</span></div>
+    <!-- Home placeholders (Admin v2.9, Pho Nov 19): '—' until loadAll() fills
+         the live values — never show mockup numbers as if they were real. -->
+    <div class="stat warn"><b id="stPend">—</b><span>အတည်ပြုရန် ကျန်</span></div>
+    <div class="stat"><b id="stBets">—</b><span>ဒီနေ့ လောင်းကစား</span></div>
+    <div class="stat"><b id="stPlayers">—</b><span>ကစားသမား စုစုပေါင်း</span></div>
+    <div class="stat"><b id="stStake">—</b><span>ဒီနေ့ ထိုးငွေ (ကျပ်)</span></div>
   </div>
   <div class="home-grid">
-    <button class="home-box" onclick="go('scr-req')">တောင်းဆို<span id="hbReq">3 ခု ကျန်</span></button>
-    <button class="home-box" onclick="go('scr-ledger')">လယ်ဂျာ<span id="hbLedger">52,000 ကျပ်</span></button>
+    <button class="home-box" onclick="go('scr-req')">တောင်းဆို<span id="hbReq">—</span></button>
+    <button class="home-box" onclick="go('scr-ledger')">လယ်ဂျာ<span id="hbLedger">—</span></button>
     <button class="home-box" onclick="go('scr-bigsmall')">ကြီးငယ်<span>အကြီးဆုံး စဉ်</span></button>
-    <button class="home-box" onclick="go('scr-res')">ရလဒ်<span id="hbRes">9 ပွဲ</span></button>
-    <button class="home-box" onclick="go('scr-bets')">လောင်းကစား<span id="hbBets">12 ကွက်</span></button>
+    <button class="home-box" onclick="go('scr-res')">ရလဒ်<span id="hbRes">—</span></button>
+    <button class="home-box" onclick="go('scr-bets')">လောင်းကစား<span id="hbBets">—</span></button>
     <button class="home-box" onclick="go('scr-summary')">စာရင်းချုပ်<span>စုစုပေါင်း</span></button>
   </div>
   <div class="card">
     <h3>စောင့်နေတာ</h3>
-    <div class="bet-row"><span>ငွေသွင်း တောင်းဆိုမှု</span><b style="color:#d92b2b" id="wIn">2 ခု</b></div>
-    <div class="bet-row"><span>ငွေထုတ် တောင်းဆိုမှု</span><b style="color:#d92b2b" id="wOut">1 ခု</b></div>
-    <div class="bet-row"><span>ရလဒ် မထည့်ရသေးတဲ့ ပွဲ</span><b id="wRes">9 ပွဲ (21.11.2026)</b></div>
+    <div class="bet-row"><span>ငွေသွင်း တောင်းဆိုမှု</span><b style="color:#d92b2b" id="wIn">—</b></div>
+    <div class="bet-row"><span>ငွေထုတ် တောင်းဆိုမှု</span><b style="color:#d92b2b" id="wOut">—</b></div>
+    <div class="bet-row"><span>ရလဒ် မထည့်ရသေးတဲ့ ပွဲ</span><b id="wRes">—</b></div>
   </div>
   <div class="card">
     <h3>ပွဲစဉ် အခြေအနေ</h3>
@@ -481,6 +483,6 @@
 <!-- record date picker calendar popup (Admin v2.3) -->
 <div id="adminCalOverlay" onclick="if(event.target===this)closeAdminCal()"><div class="acal-card" id="adminCalCard"></div></div>
 
-<script type="module" src="admin.js?v=2.8"></script>
+<script type="module" src="admin.js?v=2.9"></script>
 </body>
 </html>
