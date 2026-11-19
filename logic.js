@@ -452,6 +452,18 @@ export function missing2DPeriods(yangonDate, sessions) {
   if (!have.pm) missing.push('pm');
   return missing;
 }
+// winNumberForDate (v2.10): the winning number of one game/period's
+// session whose Yangon date equals `ymd` — the session the admin-date
+// screens (လယ်ဂျာ grid, ကြီးငယ် list) show. Null when no such session
+// exists or it has no winning number yet. NEVER fall back to the latest
+// session overall — on a past date that would paint the WRONG number green.
+export function winNumberForDate(sessions, game, period, ymd) {
+  const s = (sessions || []).find(function (r) {
+    return r.game === game && (!period || r.period === period) && yangonDateOf(r.date) === ymd;
+  });
+  return (s && s.win_number !== null && s.win_number !== undefined && String(s.win_number) !== '') ? String(s.win_number) : null;
+}
+
 // ensureToday2DSessions: create today's missing 2D sessions via `pb`
 // (pb.js or a fake in tests). `sessions` is the current m23_sessions list,
 // `yangonDate` is today's Yangon date ("YYYY-MM-DD"). Returns the created
