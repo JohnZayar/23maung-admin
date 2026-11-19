@@ -84,7 +84,12 @@
   .mrow.closed { opacity: .55; }
   .led-cell.over { background: #fee2e2; }
   .led-cell.over b { color: #b91c1c; }
+  /* v2.10 (Pho Nov 19): the winning number's cell/row is green. */
+  .led-cell.win { background: #dcfce7; }
+  .led-cell.win b { color: #166534; }
   .bet-row.over .amt, .bet-row.over .what { color: #b91c1c; font-weight: bold; }
+  .bet-row.win { background: #dcfce7; }
+  .bet-row.win .what, .bet-row.win .amt { color: #166534; }
   .lim-row { display: flex; align-items: center; gap: 6px; padding: 8px 0 2px; font-size: 13px; font-weight: bold; }
   .lim-row input { width: 110px; margin: 0; padding: 8px; text-align: center; }
   .chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
@@ -112,6 +117,9 @@
   .bs-row:last-child { border-bottom: none; }
   .bs-row .rank { color: #64748b; width: 26px; }
   .bs-row .num { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  /* v2.10 (Pho Nov 19): the winning number's row is green. */
+  .bs-row.win { background: #dcfce7; }
+  .bs-row.win .num { color: #166534; }
   .bs-row .amt { font-weight: bold; color: #1e3a5f; white-space: nowrap; flex-shrink: 0; }
   .sec-head { font-size: 15px; font-weight: bold; color: #1e3a5f; margin: 10px 0 4px; border-left: 4px solid #d4af37; padding-left: 8px; }
   .fb-bet { border-bottom: 1px solid #f1f5f9; padding-bottom: 5px; margin-bottom: 5px; }
@@ -193,12 +201,12 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.9</span></div>
+<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.10</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
   <div class="stats">
-    <!-- Home placeholders (Admin v2.9, Pho Nov 19): '—' until loadAll() fills
+    <!-- Home placeholders (Admin v2.10, Pho Nov 19): '—' until loadAll() fills
          the live values — never show mockup numbers as if they were real. -->
     <div class="stat warn"><b id="stPend">—</b><span>အတည်ပြုရန် ကျန်</span></div>
     <div class="stat"><b id="stBets">—</b><span>ဒီနေ့ လောင်းကစား</span></div>
@@ -483,6 +491,6 @@
 <!-- record date picker calendar popup (Admin v2.3) -->
 <div id="adminCalOverlay" onclick="if(event.target===this)closeAdminCal()"><div class="acal-card" id="adminCalCard"></div></div>
 
-<script type="module" src="admin.js?v=2.9"></script>
+<script type="module" src="admin.js?v=2.10"></script>
 </body>
 </html>
