@@ -13,23 +13,23 @@
   .topbar .ver { font-size: 11px; color: #fde047; white-space: nowrap; }
   .screen { display: none; padding: 10px 10px 8px; }
   .screen.active { display: block; }
-  .card { background: #fff; border-radius: 14px; padding: 12px; margin-bottom: 10px; box-shadow: 0 2px 10px rgba(30,58,95,.08); border: 1px solid #e8eef5; }
+  .card { background: #fff; border-radius: 14px; padding: 10px 12px; margin-bottom: 10px; box-shadow: 0 2px 10px rgba(30,58,95,.08); border: 1px solid #dbe4ef; }
   .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .muted { color: #64748b; font-size: 12px; }
   h3 { font-size: 15px; margin-bottom: 6px; }
   .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-  .stat { background: #fff; border-radius: 14px; padding: 12px 8px; text-align: center; box-shadow: 0 2px 10px rgba(30,58,95,.08); border: 1px solid #e8eef5; }
+  .stat { background: #fff; border-radius: 14px; padding: 10px 8px; text-align: center; box-shadow: 0 2px 10px rgba(30,58,95,.08); border: 1px solid #dbe4ef; }
   .stat b { display: block; font-size: 22px; color: #1e3a5f; }
   .stat span { font-size: 11px; color: #64748b; white-space: nowrap; display: block; overflow: hidden; text-overflow: ellipsis; }
   .stat.warn b { color: #d92b2b; }
-  .btn-green { background: linear-gradient(135deg, #166534, #14532d); color: #fff; border: none; border-radius: 10px; padding: 9px 12px; font-size: 14px; font-weight: bold; font-family: inherit; cursor: pointer; box-shadow: 0 2px 6px rgba(20,83,45,.25); }
-  .btn-red { background: linear-gradient(135deg, #dc2626, #b91c1c); color: #fff; border: none; border-radius: 10px; padding: 9px 12px; font-size: 14px; font-weight: bold; font-family: inherit; cursor: pointer; box-shadow: 0 2px 6px rgba(185,28,28,.25); }
-  .btn-ghost { background: #e8eef5; color: #1e293b; border: none; border-radius: 10px; padding: 9px 12px; font-size: 14px; font-weight: bold; font-family: inherit; cursor: pointer; }
-  .btn-navy { background: linear-gradient(135deg, #1e3a5f, #2a4a73); color: #fff; border: none; border-radius: 12px; padding: 12px; width: 100%; font-size: 15px; font-weight: bold; font-family: inherit; cursor: pointer; box-shadow: 0 3px 10px rgba(30,58,95,.28); }
+  .btn-green { background: linear-gradient(135deg, #166534, #14532d); color: #fff; border: none; border-radius: 12px; padding: 9px 12px; font-size: 14px; font-weight: bold; font-family: inherit; cursor: pointer; box-shadow: 0 2px 6px rgba(20,83,45,.25); }
+  .btn-red { background: linear-gradient(135deg, #dc2626, #b91c1c); color: #fff; border: none; border-radius: 12px; padding: 9px 12px; font-size: 14px; font-weight: bold; font-family: inherit; cursor: pointer; box-shadow: 0 2px 6px rgba(185,28,28,.25); }
+  .btn-ghost { background: #e8eef5; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 12px; padding: 9px 12px; font-size: 14px; font-weight: bold; font-family: inherit; cursor: pointer; }
+  .btn-navy { background: linear-gradient(135deg, #1e3a5f, #2a4a73); color: #fff; border: none; border-bottom: 3px solid #d4af37; border-radius: 12px; padding: 12px; width: 100%; font-size: 15px; font-weight: bold; font-family: inherit; cursor: pointer; box-shadow: 0 3px 10px rgba(30,58,95,.28); }
   .tabs { display: flex; gap: 4px; background: #e2e8f0; border-radius: 999px; padding: 3px; margin-bottom: 12px; }
   .tabs button { flex: 1; background: none; border: none; padding: 8px 2px; font-size: 13px; font-weight: bold; font-family: inherit; color: #64748b; cursor: pointer; border-radius: 999px; white-space: nowrap; overflow: hidden; }
   .tabs button.on { color: #fff; background: #1e3a5f; box-shadow: 0 2px 6px rgba(30,58,95,.25); }
-  .req { border: 1px solid #e8eef5; border-radius: 12px; padding: 11px; margin-bottom: 9px; box-shadow: 0 1px 5px rgba(30,58,95,.05); }
+  .req { border: 1px solid #dbe4ef; border-radius: 12px; padding: 10px 12px; margin-bottom: 9px; box-shadow: 0 1px 5px rgba(30,58,95,.05); }
   .req .rhead { display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; margin-bottom: 2px; }
   .req .ramt { font-size: 18px; font-weight: bold; color: #1e3a5f; }
   .req .rmeta { font-size: 12px; color: #64748b; margin-bottom: 6px; line-height: 1.5; }
@@ -48,10 +48,10 @@
   .bet-row .amt { font-weight: bold; color: #1e3a5f; white-space: nowrap; flex-shrink: 0; }
   input[type=text], input[type=number], input[type=password], input[type=tel], input[type=email], select { width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px; font-size: 15px; font-family: inherit; margin-bottom: 8px; outline: none; background: #fbfdff; }
   input[type=text]:focus, input[type=number]:focus, input[type=password]:focus, input[type=tel]:focus, input[type=email]:focus, select:focus { border-color: #1e3a5f; box-shadow: 0 0 0 3px rgba(30,58,95,.12); background: #fff; }
-  .set-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 2px; border-bottom: 1px solid #f1f5f9; font-size: 14px; gap: 8px; }
+  .set-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 2px; border-bottom: 1px solid #f1f5f9; font-size: 14px; gap: 8px; }
   .set-row > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .set-row:last-child { border-bottom: none; }
-  .set-row input { width: 90px; margin: 0; text-align: center; padding: 8px; }
+  .set-row input { width: 84px; margin: 0; text-align: center; padding: 7px; font-weight: bold; color: #1e3a5f; }
   .toggle { width: 52px; height: 28px; border-radius: 999px; background: #cbd5e1; border: none; cursor: pointer; position: relative; flex-shrink: 0; }
   .toggle.on { background: #16a34a; }
   .toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: left .15s; }
@@ -62,10 +62,10 @@
   nav { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #e8eef5; display: flex; height: 56px; z-index: 10; box-shadow: 0 -2px 12px rgba(30,58,95,.07); padding: 4px 6px; }
   nav button { flex: 1; background: none; border: none; font-size: 10px; font-weight: bold; font-family: inherit; color: #64748b; cursor: pointer; border-radius: 10px; white-space: nowrap; overflow: hidden; padding: 0 1px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
   nav button svg { display: block; width: 20px; height: 20px; margin: 0 auto 1px; }
-  nav button.on { color: #1e3a5f; background: #e8eef5; }
+  nav button.on { color: #1e3a5f; background: #e8eef5; box-shadow: inset 0 2px 0 #d4af37; }
   #toast { position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); background: #1e293b; color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 14px; display: none; z-index: 50; white-space: nowrap; max-width: 94vw; overflow: hidden; text-overflow: ellipsis; }
-  .sect { font-size: 14px; font-weight: bold; color: #1e3a5f; margin: 14px 2px 7px; border-left: 3px solid #d4af37; padding-left: 8px; }
-  .user-card { border: 1px solid #e8eef5; border-radius: 12px; margin-bottom: 10px; overflow: hidden; box-shadow: 0 1px 5px rgba(30,58,95,.05); }
+  .sect { font-size: 14px; font-weight: bold; color: #1e3a5f; margin: 12px 2px 6px; border-left: 4px solid #d4af37; padding-left: 8px; }
+  .user-card { border: 1px solid #dbe4ef; border-radius: 12px; margin-bottom: 10px; overflow: hidden; box-shadow: 0 1px 5px rgba(30,58,95,.05); }
   .user-head { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; background: #f8fafc; cursor: pointer; font-weight: bold; font-size: 14px; }
   .user-head .tot { color: #1e3a5f; }
   .user-body { display: none; padding: 6px 12px 10px; border-top: 1px solid #e2e8f0; }
@@ -95,32 +95,32 @@
   .bet-row.blocked .what, .bet-row.blocked .amt { color: #b91c1c; font-weight: bold; }
   .mini-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
   .mini-tabs button { flex: 1; border: 1px solid #cbd5e1; background: #fff; border-radius: 10px; padding: 8px; font-size: 14px; font-weight: bold; font-family: inherit; color: #64748b; cursor: pointer; white-space: nowrap; }
-  .mini-tabs button.on { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
+  .mini-tabs button.on { background: #1e3a5f; color: #fff; border-color: #1e3a5f; box-shadow: 0 2px 8px rgba(30,58,95,.25); }
   /* 2D period switch (Admin v2.5): small pills — မနက် / ညနေ / နှစ်ခုလုံး. */
   .per-row { display: flex; gap: 6px; margin-bottom: 8px; }
   .per-row button { flex: 1; border: 1px solid #cbd5e1; background: #fff; border-radius: 999px; padding: 6px 2px; font-size: 13px; font-weight: bold; font-family: inherit; color: #64748b; cursor: pointer; white-space: nowrap; }
-  .per-row button.on { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
-  .net-match { border: 1px solid #e8eef5; border-radius: 12px; padding: 10px 12px; margin-bottom: 9px; background: #fff; box-shadow: 0 1px 5px rgba(30,58,95,.05); }
+  .per-row button.on { background: #1e3a5f; color: #fff; border-color: #1e3a5f; box-shadow: 0 2px 8px rgba(30,58,95,.25); }
+  .net-match { border: 1px solid #dbe4ef; border-radius: 12px; padding: 10px 12px; margin-bottom: 9px; background: #fff; box-shadow: 0 1px 5px rgba(30,58,95,.05); }
   .net-match .nm-head { font-weight: bold; font-size: 14px; margin-bottom: 4px; }
   .net-row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; color: #475569; white-space: nowrap; gap: 8px; }
   .net-row b { color: #1e293b; }
   .net-res { font-weight: bold; color: #b91c1c; font-size: 14px; padding-top: 4px; border-top: 1px dashed #e2e8f0; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .home-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-  .home-box { background: #1e3a5f; color: #fff; border: none; border-radius: 10px; padding: 12px 4px; font-size: 14px; font-weight: bold; font-family: inherit; cursor: pointer; text-align: center; white-space: nowrap; overflow: hidden; }
+  .home-box { background: #1e3a5f; color: #fff; border: none; border-bottom: 2px solid #d4af37; border-radius: 12px; padding: 11px 4px; font-size: 14px; font-weight: bold; font-family: inherit; cursor: pointer; text-align: center; white-space: nowrap; overflow: hidden; box-shadow: 0 2px 8px rgba(30,58,95,.25); }
   .home-box span { display: block; font-size: 11px; font-weight: normal; color: #bfdbfe; margin-top: 2px; }
   .bs-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 2px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
   .bs-row:last-child { border-bottom: none; }
   .bs-row .rank { color: #64748b; width: 26px; }
   .bs-row .num { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .bs-row .amt { font-weight: bold; color: #1e3a5f; white-space: nowrap; flex-shrink: 0; }
-  .sec-head { font-size: 15px; font-weight: bold; color: #1e3a5f; margin: 10px 0 4px; }
+  .sec-head { font-size: 15px; font-weight: bold; color: #1e3a5f; margin: 10px 0 4px; border-left: 4px solid #d4af37; padding-left: 8px; }
   .fb-bet { border-bottom: 1px solid #f1f5f9; padding-bottom: 5px; margin-bottom: 5px; }
   .fb-bet:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
   .fb-bet .bet-row, .fb-bet .bs-row { border-bottom: none; padding-bottom: 1px; }
   .fb-leg { font-size: 12px; color: #64748b; padding: 2px 2px 2px 12px; line-height: 1.6; }
   /* ---- body ledger + hedge (v1.6) ---- */
   .ld-legend { font-size: 11px; color: #64748b; margin-bottom: 2px; }
-  .ld-card { border: 1px solid #e8eef5; border-radius: 12px; padding: 10px 12px; margin-bottom: 9px; background: #fff; box-shadow: 0 1px 5px rgba(30,58,95,.05); cursor: pointer; }
+  .ld-card { border: 1px solid #dbe4ef; border-radius: 12px; padding: 10px 12px; margin-bottom: 9px; background: #fff; box-shadow: 0 1px 5px rgba(30,58,95,.05); cursor: pointer; }
   .ld-card:focus { outline: 2px solid #1e3a5f; outline-offset: 1px; }
   .ld-card.ld-passed { opacity: .55; }
   .ld-head { font-weight: bold; font-size: 14px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
@@ -132,7 +132,7 @@
   .ld-net { display: flex; justify-content: space-between; font-weight: bold; color: #b91c1c; font-size: 14px; padding-top: 5px; border-top: 1px dashed #e2e8f0; margin-top: 4px; }
   .m-hedged { color: #854d0e; background: #fef9c3; border-radius: 8px; padding: 4px 8px; font-size: 13px; font-weight: bold; margin-top: 6px; }
   .zero { opacity: .45; }
-  .btn-block { background: linear-gradient(135deg, #1e3a5f, #2a4a73); color: #fff; border: none; border-radius: 12px; padding: 12px; width: 100%; font-size: 15px; font-weight: bold; font-family: inherit; cursor: pointer; box-shadow: 0 3px 10px rgba(30,58,95,.28); }
+  .btn-block { background: linear-gradient(135deg, #1e3a5f, #2a4a73); color: #fff; border: none; border-bottom: 3px solid #d4af37; border-radius: 12px; padding: 12px; width: 100%; font-size: 15px; font-weight: bold; font-family: inherit; cursor: pointer; box-shadow: 0 3px 10px rgba(30,58,95,.28); }
   /* hedge bottom sheet */
   .sheet-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 40; display: none; }
   .sheet-backdrop.open { display: block; }
@@ -140,7 +140,7 @@
   .sheet.open { transform: translateY(0); pointer-events: auto; }
   .sheet h3 { font-size: 15px; margin-bottom: 8px; padding-right: 28px; }
   .sheet .x { position: absolute; top: 10px; right: 12px; border: none; background: none; font-size: 20px; cursor: pointer; color: #64748b; }
-  .hs-row { border: 1px solid #e8eef5; border-radius: 12px; padding: 10px; margin-bottom: 10px; }
+  .hs-row { border: 1px solid #dbe4ef; border-radius: 12px; padding: 10px; margin-bottom: 10px; }
   .hs-label { font-size: 13px; margin-bottom: 6px; }
   .hs-inputs { display: flex; gap: 6px; }
   .hs-inputs input { margin-bottom: 0; flex: 1; min-width: 0; }
@@ -157,7 +157,7 @@
   .fs-line { font-family: monospace; font-size: 13px; padding: 1px 0 1px 10px; }
   /* ---- record date picker (Admin v2.3, same design as Player v2.10) ---- */
   .acal-row { display: flex; justify-content: flex-end; margin-bottom: 8px; }
-  .acal-btn { display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 6px 10px; font-size: 14px; font-weight: 600; color: #1e293b; font-family: inherit; cursor: pointer; white-space: nowrap; box-shadow: 0 2px 10px rgba(30,58,95,.08); }
+  .acal-btn { display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #dbe4ef; border-radius: 12px; padding: 6px 10px; font-size: 14px; font-weight: 600; color: #1e293b; font-family: inherit; cursor: pointer; white-space: nowrap; box-shadow: 0 2px 10px rgba(30,58,95,.08); }
   .acal-btn svg { width: 18px; height: 18px; flex: none; }
   #adminCalOverlay { position: fixed; inset: 0; background: rgba(15,23,42,.5); z-index: 300; display: none; align-items: flex-start; justify-content: center; padding: 28px 16px; }
   .acal-card { background: #fff; border-radius: 16px; width: 100%; max-width: 340px; padding: 18px 16px 16px; box-shadow: 0 12px 32px rgba(15,23,42,.25); }
@@ -193,7 +193,7 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.7</span></div>
+<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.8</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
@@ -424,11 +424,8 @@
     <div class="set-row"><span>2D — 100 ကျပ် ထိုးရင်</span><span><input type="number" id="rate2d" value="9000"> ကျပ်</span></div>
     <div class="set-row"><span>3D — 100 ကျပ် ထိုးရင်</span><span><input type="number" id="rate3d" value="65000"> ကျပ်</span></div>
   </div>
-  <div class="sect">မောင်း အကောက်</div>
+  <div class="sect">မောင်း</div>
   <div class="card">
-    <div class="set-row"><span>၂–၃ ပွဲ</span><span><input type="number" id="comm23" value="15"> %</span></div>
-    <div class="set-row"><span>၄–၇ ပွဲ</span><span><input type="number" id="comm47" value="20"> %</span></div>
-    <div class="set-row"><span>၈–၁၀ ပွဲ</span><span><input type="number" id="comm810" value="30"> %</span></div>
     <div class="set-row"><span>မောင်း အများဆုံး</span><span><input type="number" id="maxLegs" value="10"> သင်း</span></div>
   </div>
   <div class="sect">ကန့်သတ်ချက်</div>
@@ -484,6 +481,6 @@
 <!-- record date picker calendar popup (Admin v2.3) -->
 <div id="adminCalOverlay" onclick="if(event.target===this)closeAdminCal()"><div class="acal-card" id="adminCalCard"></div></div>
 
-<script type="module" src="admin.js?v=2.7"></script>
+<script type="module" src="admin.js?v=2.8"></script>
 </body>
 </html>
