@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.7';
+import * as L from './logic.js?v=2.8';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -1349,9 +1349,6 @@ function renderSettings() {
   const s = state.settings;
   if (s.rate_2d !== undefined) $('rate2d').value = s.rate_2d;
   if (s.rate_3d !== undefined) $('rate3d').value = s.rate_3d;
-  if (s.comm_23 !== undefined) $('comm23').value = s.comm_23;
-  if (s.comm_47 !== undefined) $('comm47').value = s.comm_47;
-  if (s.comm_810 !== undefined) $('comm810').value = s.comm_810;
   if (s.max_legs !== undefined) $('maxLegs').value = s.max_legs;
   if (s.min_fb !== undefined) $('minFb').value = s.min_fb;
   if (s.min_2d3d !== undefined) $('min23').value = s.min_2d3d;
@@ -1460,9 +1457,6 @@ async function saveSettings() {
   const body = {
     rate_2d: parseInt($('rate2d').value, 10) || 9000,
     rate_3d: parseInt($('rate3d').value, 10) || 65000,
-    comm_23: parseInt($('comm23').value, 10) || 15,
-    comm_47: parseInt($('comm47').value, 10) || 20,
-    comm_810: parseInt($('comm810').value, 10) || 30,
     max_legs: parseInt($('maxLegs').value, 10) || 10,
     min_fb: parseInt($('minFb').value, 10) || 500,
     min_2d3d: parseInt($('min23').value, 10) || 100,
