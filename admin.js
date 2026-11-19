@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.9';
+import * as L from './logic.js?v=2.10';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -88,6 +88,13 @@ function latestSession(game, period) {
     .filter(function (s) { return s.game === game && (!period || s.period === period); })
     .sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
   return list[0] || null;
+}
+// winOf (v2.10): the winning number of the ADMIN DATE's session for one
+// game/period (Pho Nov 19 — the winning number shows green in the ledger
+// and ကြီးငယ် lists). Date-scoped via L.winNumberForDate — never the
+// latest session overall (wrong on past dates).
+function winOf(game, period) {
+  return L.winNumberForDate(state.sessions, game, period, ensureAdminDate());
 }
 function settingsOr(def) {
   const s = state.settings || {};
@@ -813,14 +820,15 @@ function totOf(tot) { return Object.keys(tot).reduce(function (a, k) { return a 
 // per-section (Admin v2.4): a number is red only when THIS session's total
 // on it exceeds the limit (or it is blocked) — never because the other
 // session pushed the combined total over.
-function ledGridHtml(tot, lim) {
+function ledGridHtml(tot, lim, win) {
   var out = '';
   for (var i = 0; i < 100; i++) {
     var n = ('0' + i).slice(-2);
     var v = tot[n] || 0;
-    // Blocked = RED, identical to over-limit (cellClass returns ' over'
-    // for both — never dark, never strikethrough, never '(ပိတ်)').
-    var cls = L.cellClass(v, lim, BLOCKED['2d'].indexOf(n) >= 0);
+    // v2.10 (Pho Nov 19): the session's WINNING number is green — it beats
+    // the red/purple classes (the draw is decided; "this number won" is
+    // the operative fact). Null win = no green anywhere.
+    var cls = (win && n === win) ? ' win' : L.cellClass(v, lim, BLOCKED['2d'].indexOf(n) >= 0);
     out += '<div class="led-cell' + cls + '"><b>' + n + '</b>' + (v ? fmt(v) : '–') + '</div>';
   }
   return out;
@@ -830,8 +838,8 @@ function renderLedger2D() {
   // Admin v2.4 am/pm split (Pho Nov 17): two grids, one per session.
   // The day total (ledSub2d + ledTot2d) is AM + PM and stays combined.
   var per = resolveAdminPeriod();
-  var gAm = $('ledGrid2dAm'); if (gAm) gAm.innerHTML = ledGridHtml(LED2D_AM, lim);
-  var gPm = $('ledGrid2dPm'); if (gPm) gPm.innerHTML = ledGridHtml(LED2D_PM, lim);
+  var gAm = $('ledGrid2dAm'); if (gAm) gAm.innerHTML = ledGridHtml(LED2D_AM, lim, winOf('2d', 'am'));
+  var gPm = $('ledGrid2dPm'); if (gPm) gPm.innerHTML = ledGridHtml(LED2D_PM, lim, winOf('2d', 'pm'));
   var tAm = totOf(LED2D_AM), tPm = totOf(LED2D_PM), tot = tAm + tPm;
   // Admin v2.5 LABEL FIX: the section heads in index.html already carry
   // the static 'မနက်ပိုင်း ·' / 'ညနေပိုင်း ·' prefix — the span must hold
@@ -850,10 +858,11 @@ function renderLedger3D() {
   var w = $('ledList3d');
   if (!w) return;
   var lim = limitOf('3d');
+  var win = winOf('3d', 'round');
   var out = '';
   Object.keys(LED3D).sort().forEach(function (n) {
     var v = LED3D[n];
-    var cls = L.cellClass(v, lim, BLOCKED['3d'].indexOf(n) >= 0);
+    var cls = (win && n === win) ? ' win' : L.cellClass(v, lim, BLOCKED['3d'].indexOf(n) >= 0);
     out += '<div class="bet-row' + cls + '"><span class="what">' + n + '</span><span class="amt">' + fmt(v) + ' ကျပ်</span></div>';
   });
   w.innerHTML = out || '<div class="muted">3D လောင်းကစား မရှိသေးဘူး</div>';
@@ -945,12 +954,14 @@ function setBsTab(t) {
 }
 // One big/small section (Admin v2.4 am/pm split): a heading plus the
 // section's biggest-first list, ranked 1..n within the section.
-function bsSectionHtml(title, list) {
+function bsSectionHtml(title, list, win) {
   var out = '<div class="sec-head">' + esc(title) + '</div>';
   var sorted = L.sortBsDesc(list || []);
   if (!sorted.length) { out += '<div class="muted">စာရင်း မရှိသေးဘူး</div>'; return out; }
   sorted.forEach(function (e, i) {
-    out += '<div class="bs-row"><span><span class="rank">' + (i + 1) + '.</span> <span class="num">' + esc(e.n) + ' = ' + e.v + '</span></span></div>';
+    // v2.10 (Pho Nov 19): the winning number's row is green.
+    var wcls = (win && String(e.n) === String(win)) ? ' win' : '';
+    out += '<div class="bs-row' + wcls + '"><span><span class="rank">' + (i + 1) + '.</span> <span class="num">' + esc(e.n) + ' = ' + e.v + '</span></span></div>';
   });
   return out;
 }
@@ -967,8 +978,8 @@ function renderBs() {
     // be mixed. Admin v2.5: the switch shows only the selected section(s).
     var per = resolveAdminPeriod();
     var out = '';
-    if (per !== 'pm') out += bsSectionHtml('မနက်ပိုင်း', BS['2dAm'] || []);
-    if (per !== 'am') out += bsSectionHtml('ညနေပိုင်း', BS['2dPm'] || []);
+    if (per !== 'pm') out += bsSectionHtml('မနက်ပိုင်း', BS['2dAm'] || [], winOf('2d', 'am'));
+    if (per !== 'am') out += bsSectionHtml('ညနေပိုင်း', BS['2dPm'] || [], winOf('2d', 'pm'));
     w.innerHTML = out;
     return;
   }
@@ -978,8 +989,12 @@ function renderBs() {
     ? L.sortParlayEntriesByKickoff(BS['parlay'] || [], fxById())
     : L.sortBsDesc(BS[bsTab] || []);
   var out = '';
+  // v2.10 (Pho Nov 19): 3D list rows — the winning number's row is green.
+  // Parlay rows never get it (win3 is null unless this is the 3D tab).
+  var win3 = (bsTab === '3d') ? winOf('3d', 'round') : null;
   list.forEach(function (e, i) {
-    var row = '<div class="bs-row"><span><span class="rank">' + (i + 1) + '.</span> <span class="num">' + esc(e.n) + ' = ' + e.v + '</span></span></div>';
+    var wcls = (win3 && String(e.n) === String(win3)) ? ' win' : '';
+    var row = '<div class="bs-row' + wcls + '"><span><span class="rank">' + (i + 1) + '.</span> <span class="num">' + esc(e.n) + ' = ' + e.v + '</span></span></div>';
     if (bsTab === 'parlay' && e.bet) {
       // Parlay: one line per leg (match, pick, odds, kickoff time, outcome) + status.
       out += '<div class="fb-bet">' + row + fbDetailHtml(e.bet, true, fxById()) + '</div>';
