@@ -324,6 +324,13 @@ export function weekdayOf(ymd) {
   const d = new Date(Date.UTC(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10)));
   return isNaN(d.getTime()) ? null : d.getUTCDay();
 }
+// weekdayNameMm (v2.13, Pho Nov 20): Burmese weekday name of a YYYY-MM-DD
+// date, for the 3D round label ('16.11.2026 တနင်္လာ'). '' when unresolvable.
+export function weekdayNameMm(ymd) {
+  const names = ['တနင်္ဂနွေ', 'တနင်္လာ', 'အင်္ဂါ', 'ဗုဒ္ဓဟူး', 'ကြာသပတေး', 'သောကြာ', 'စနေ'];
+  const wd = weekdayOf(ymd);
+  return wd === null ? '' : names[wd];
+}
 // weekRange: {mon, fri} — the Monday and Friday of the week containing ymd.
 export function weekRange(ymd) {
   const wd = weekdayOf(ymd);
@@ -346,6 +353,28 @@ export function betInRange(bet, sessions, kind, fromYmd, toYmd) {
 // betOnDate: true when the bet's resolved date is exactly ymd. Null -> false.
 export function betOnDate(bet, sessions, kind, ymd) {
   return adminBetDate(bet, sessions, kind) === ymd;
+}
+// periodNet2D3D (v2.13, Pho Nov 20, option A): net profit of 2D/3D bets in a
+// period = stake - payouts, counting ONLY bets whose session already has a
+// win_number (drawn). A bet whose session has no win_number yet is EXCLUDED
+// entirely — neither its stake nor any payout counts — so the net is the
+// settled profit so far. Payouts use settle2D3DBet, the same function the
+// app settles with (rate from settings, 2D 9000 / 3D 65000 per 100 by
+// default), so the net matches what the app actually pays out. Returns
+// {net, settled} where settled = number of bets counted.
+export function periodNet2D3D(bets, sessions, settings, game) {
+  const ratePer100 = game === '2d'
+    ? (settings && settings.rate_2d !== undefined ? settings.rate_2d : 9000)
+    : (settings && settings.rate_3d !== undefined ? settings.rate_3d : 65000);
+  let net = 0, settled = 0;
+  (bets || []).forEach(function (b) {
+    const s = b && b.session ? (sessions || []).find(function (r) { return r.id === b.session; }) : null;
+    const win = s && s.win_number !== null && s.win_number !== undefined && String(s.win_number) !== '' ? String(s.win_number) : null;
+    if (win === null) return; // not drawn yet — excluded (Pho option A)
+    net += (b.total || b.stake || 0) - settle2D3DBet(b, win, ratePer100).win_amount;
+    settled++;
+  });
+  return { net: net, settled: settled };
 }
 
 // adminBetPeriod: the session period ('am'/'pm') of one 2D bet row, for the
