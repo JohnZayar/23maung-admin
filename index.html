@@ -46,6 +46,7 @@
   .bet-row .who { font-weight: bold; }
   .bet-row .what { color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .bet-row .amt { font-weight: bold; color: #1e3a5f; white-space: nowrap; flex-shrink: 0; }
+  .bet-row .amt.neg { color: #d92b2b; }
   input[type=text], input[type=number], input[type=password], input[type=tel], input[type=email], select { width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px; font-size: 15px; font-family: inherit; margin-bottom: 8px; outline: none; background: #fbfdff; }
   input[type=text]:focus, input[type=number]:focus, input[type=password]:focus, input[type=tel]:focus, input[type=email]:focus, select:focus { border-color: #1e3a5f; box-shadow: 0 0 0 3px rgba(30,58,95,.12); background: #fff; }
   .set-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 2px; border-bottom: 1px solid #f1f5f9; font-size: 14px; gap: 8px; }
@@ -201,7 +202,7 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.13</span></div>
+<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.14</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
@@ -493,6 +494,6 @@
 <!-- record date picker calendar popup (Admin v2.3) -->
 <div id="adminCalOverlay" onclick="if(event.target===this)closeAdminCal()"><div class="acal-card" id="adminCalCard"></div></div>
 
-<script type="module" src="admin.js?v=2.13"></script>
+<script type="module" src="admin.js?v=2.14"></script>
 </body>
 </html>
