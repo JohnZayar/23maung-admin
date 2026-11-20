@@ -305,6 +305,49 @@ export function filterBetsByDate(bets, sessions, kind, ymd) {
   return (bets || []).filter(function (b) { return betMatchesDate(b, sessions, kind, ymd); });
 }
 
+// ---- Summary periods (Admin v2.11, Pho Nov 20) ------------------------------
+// The စာရင်းချုပ် screen is split by game, each with its own natural period:
+//   2D  = the WEEK containing the picked date (Mon–Fri; 2D runs Mon–Fri, the
+//         week's total is the Friday-evening total, closed on Monday).
+//   3D  = the ROUND containing the picked date (1st or 16th draw).
+//   1D  = the picked DAY itself (football is daily).
+// Unlike betMatchesDate (which SHOWS unresolvable bets so ledger lists never
+// hide a record), the period filters below EXCLUDE bets whose date cannot be
+// resolved: an unresolvable bet would otherwise be counted in EVERY week /
+// round / day and inflate every period total. There is no "all" period in the
+// summary, so nothing is lost from any total the screen shows.
+// weekdayOf: 0=Sun .. 6=Sat (UTC math, no timezone dependence — ymd is a
+// calendar date already).
+export function weekdayOf(ymd) {
+  const p = String(ymd || '').split('-');
+  if (p.length !== 3) return null;
+  const d = new Date(Date.UTC(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10)));
+  return isNaN(d.getTime()) ? null : d.getUTCDay();
+}
+// weekRange: {mon, fri} — the Monday and Friday of the week containing ymd.
+export function weekRange(ymd) {
+  const wd = weekdayOf(ymd);
+  if (wd === null) return null;
+  const mon = ymdAdd(ymd, -((wd + 6) % 7));
+  return { mon: mon, fri: ymdAdd(mon, 4) };
+}
+// roundForDate: the 3D round date (1st or 16th) on or before ymd.
+export function roundForDate(ymd) {
+  const p = String(ymd || '').split('-');
+  if (p.length !== 3) return null;
+  return p[0] + '-' + p[1] + '-' + (parseInt(p[2], 10) <= 15 ? '01' : '16');
+}
+// betInRange: true when the bet's resolved date is within [fromYmd, toYmd]
+// (inclusive, YYYY-MM-DD strings compare in order). Null date -> false.
+export function betInRange(bet, sessions, kind, fromYmd, toYmd) {
+  const d = adminBetDate(bet, sessions, kind);
+  return d !== null && d >= fromYmd && d <= toYmd;
+}
+// betOnDate: true when the bet's resolved date is exactly ymd. Null -> false.
+export function betOnDate(bet, sessions, kind, ymd) {
+  return adminBetDate(bet, sessions, kind) === ymd;
+}
+
 // adminBetPeriod: the session period ('am'/'pm') of one 2D bet row, for the
 // Admin v2.4 am/pm split (Pho Nov 17: "ခွဲပြမှ အမှန်ရမယ်" — morning and
 // evening are separate draws and must never be mixed). Only 2D bets have
