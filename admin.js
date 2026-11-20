@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.12';
+import * as L from './logic.js?v=2.13';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -1319,7 +1319,7 @@ function renderSummary() {
   } else if (tab === '3d') {
     const r = L.roundForDate(ymd) || ymd;
     bets = state.bets3d.filter(function (b) { return L.betOnDate(b, sess, '3d', r); });
-    periodLabel = 'ပွဲစဉ်: ' + L.fmtDateOnly(r);
+    periodLabel = 'ပွဲစဉ်: ' + L.fmtDateOnly(r) + ' ' + L.weekdayNameMm(r);
   } else {
     bets = state.betsFb.filter(function (b) { return L.betOnDate(b, sess, 'fb', ymd); });
     periodLabel = 'နေ့: ' + L.fmtDateOnly(ymd);
@@ -1327,15 +1327,14 @@ function renderSummary() {
   const amtOf = function (b) { return b.total || b.stake || 0; };
   const stake = bets.reduce(function (a, b) { return a + amtOf(b); }, 0);
   $('sumStake').textContent = fmt(stake);
-  $('sumBets').textContent = bets.length;
   const perUser = {};
   bets.forEach(function (b) { perUser[b.player] = (perUser[b.player] || 0) + amtOf(b); });
-  $('sumPlayers').textContent = Object.keys(perUser).length;
   const plEl = $('sumPeriodLabel');
   if (plEl) plEl.textContent = periodLabel;
-  $('sumPerUser').innerHTML = Object.keys(perUser).map(function (pid) {
+  const perUserIds = Object.keys(perUser);
+  $('sumPerUser').innerHTML = perUserIds.map(function (pid) {
     return '<div class="bet-row"><span class="who">' + esc(playerName(pid)) + '</span><span class="amt">' + fmt(perUser[pid]) + ' ကျပ်</span></div>';
-  }).join('') || '<div class="muted">ယူဆာ မရှိသေးဘူး</div>';
+  }).join('') + (perUserIds.length ? '<div class="bet-row"><span class="who"><b>Total</b></span><span class="amt"><b>' + fmt(stake) + ' ကျပ်</b></span></div>' : '<div class="muted">ယူဆာ မရှိသေးဘူး</div>');
   // Football + hedge nets (1D tab only; the card hides on the 2D/3D tabs).
   const fbWrap = $('sumFbWrap');
   if (fbWrap) fbWrap.style.display = tab === 'fb' ? '' : 'none';
@@ -1363,6 +1362,20 @@ function renderSummary() {
       ? fbLines.map(function (l) { return '<div>' + esc(l) + '</div>'; }).join('') + '<div><b>Total ' + fmt(fbTotal) + '</b></div>'
       : '<div>ဘောပွဲ မရှိသေးပါ</div>';
   }
+  // Net profit (v2.13, Pho Nov 20, option A): stake - payouts, counting ONLY
+  // settled bets. 2D/3D: sessions whose win_number is set (L.periodNet2D3D);
+  // a session not drawn yet is excluded entirely. Football: -fbTotal (the
+  // bookie's net; fbLines holds settled bets only). '—' when nothing in the
+  // period is settled yet; negative shows red via the warn class.
+  let netTxt = '—', netNeg = false;
+  if (tab === 'fb') {
+    if (fbLines.length) { const n = -fbTotal; netTxt = fmt(n); netNeg = n < 0; }
+  } else {
+    const r = L.periodNet2D3D(bets, sess, state.settings || {}, tab);
+    if (r.settled > 0) { netTxt = fmt(r.net); netNeg = r.net < 0; }
+  }
+  const netEl = $('sumNet'); if (netEl) netEl.textContent = netTxt;
+  const netStat = $('sumNetStat'); if (netStat) netStat.classList.toggle('warn', netNeg);
   // Hedge profit/loss (v1.6, Pho Nov 15 08:56): the 1.5% rebate lives HERE,
   // in the hedge profit/loss — win x0.965, loss x0.985. Each settled hedge
   // shows gross (net), e.g. '+10000 (+9650)'; Total = sum of nets (Pho's
