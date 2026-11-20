@@ -354,6 +354,18 @@ export function betInRange(bet, sessions, kind, fromYmd, toYmd) {
 export function betOnDate(bet, sessions, kind, ymd) {
   return adminBetDate(bet, sessions, kind) === ymd;
 }
+// betNet2D3D (v2.14): one 2D/3D bet's net (stake - payout) or null when its
+// session has no win_number yet (not drawn). Payouts via settle2D3DBet,
+// the same function the app settles with, so the net matches actual payouts.
+export function betNet2D3D(bet, sessions, settings, game) {
+  const s = bet && bet.session ? (sessions || []).find(function (r) { return r.id === bet.session; }) : null;
+  const win = s && s.win_number !== null && s.win_number !== undefined && String(s.win_number) !== '' ? String(s.win_number) : null;
+  if (win === null) return null; // not drawn yet — excluded (Pho option A)
+  const ratePer100 = game === '2d'
+    ? (settings && settings.rate_2d !== undefined ? settings.rate_2d : 9000)
+    : (settings && settings.rate_3d !== undefined ? settings.rate_3d : 65000);
+  return (bet.total || bet.stake || 0) - settle2D3DBet(bet, win, ratePer100).win_amount;
+}
 // periodNet2D3D (v2.13, Pho Nov 20, option A): net profit of 2D/3D bets in a
 // period = stake - payouts, counting ONLY bets whose session already has a
 // win_number (drawn). A bet whose session has no win_number yet is EXCLUDED
@@ -363,18 +375,25 @@ export function betOnDate(bet, sessions, kind, ymd) {
 // default), so the net matches what the app actually pays out. Returns
 // {net, settled} where settled = number of bets counted.
 export function periodNet2D3D(bets, sessions, settings, game) {
-  const ratePer100 = game === '2d'
-    ? (settings && settings.rate_2d !== undefined ? settings.rate_2d : 9000)
-    : (settings && settings.rate_3d !== undefined ? settings.rate_3d : 65000);
   let net = 0, settled = 0;
   (bets || []).forEach(function (b) {
-    const s = b && b.session ? (sessions || []).find(function (r) { return r.id === b.session; }) : null;
-    const win = s && s.win_number !== null && s.win_number !== undefined && String(s.win_number) !== '' ? String(s.win_number) : null;
-    if (win === null) return; // not drawn yet — excluded (Pho option A)
-    net += (b.total || b.stake || 0) - settle2D3DBet(b, win, ratePer100).win_amount;
-    settled++;
+    const n = betNet2D3D(b, sessions, settings, game);
+    if (n === null) return;
+    net += n; settled++;
   });
   return { net: net, settled: settled };
+}
+// periodNetByUser (v2.14, Pho Nov 20): per-player net {playerId: net} for
+// 2D/3D bets in a period — settled sessions only (option A). Players with
+// no settled bet in the period do not appear.
+export function periodNetByUser(bets, sessions, settings, game) {
+  const byUser = {};
+  (bets || []).forEach(function (b) {
+    const n = betNet2D3D(b, sessions, settings, game);
+    if (n === null) return;
+    byUser[b.player] = (byUser[b.player] || 0) + n;
+  });
+  return byUser;
 }
 
 // adminBetPeriod: the session period ('am'/'pm') of one 2D bet row, for the
