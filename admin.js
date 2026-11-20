@@ -23,7 +23,8 @@ const state = {
   adminDate: null,    // record date picker (Admin v2.3): 'YYYY-MM-DD' Yangon; null until set
   adminCalView: null, // calendar popup viewed month {y, m} (m 0-based)
   adminPeriod: null,  // 2D period switch (Admin v2.5): 'am' | 'pm' | 'both'; null until resolved
-  adminPeriodManual: false // operator tapped a pill — the auto clock rule must not override it
+  adminPeriodManual: false, // operator tapped a pill — the auto clock rule must not override it
+  sumTab: '2d',       // summary game tab (Admin v2.11): '2d' | '3d' | 'fb'
 };
 
 // Mockup sample data (kept as the pre-login / offline fallback).
@@ -368,7 +369,10 @@ function renderAll() {
 // all three screens; default = today (Yangon); the chosen date survives the
 // 30s auto-refresh (ensureAdminDate only sets it once). Settings are NOT
 // filtered: limit input, close times, blocked numbers stay as they are.
-// scr-res (ရလဒ်) and scr-summary (စာရင်းချုပ်) have NO picker (out of scope).
+// scr-res (ရလဒ်) has NO picker (out of scope). scr-summary (စာရင်းချုပ်) got
+// one in v2.11 — it shares state.adminDate with the other screens, and the
+// picked date drives the summary's per-game period (2D week / 3D round /
+// 1D day).
 var CAL_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 function ensureAdminDate() {
   if (!state.adminDate) state.adminDate = todayYgn();
@@ -376,7 +380,7 @@ function ensureAdminDate() {
 }
 function syncAdminDateText() {
   const txt = state.adminDate ? L.fmtDateOnly(state.adminDate) : '';
-  ['adminDateTextLedger', 'adminDateTextBs', 'adminDateTextBets'].forEach(function (id) {
+  ['adminDateTextLedger', 'adminDateTextBs', 'adminDateTextBets', 'adminDateTextSummary'].forEach(function (id) {
     const el = $(id);
     if (el) el.textContent = txt;
   });
@@ -1278,33 +1282,74 @@ function renderDashboard() {
   }
   function isTodayBet(b) { return isToday(b.created); }
 }
+// Summary game tabs (Admin v2.11, Pho Nov 20): the စာရင်းချုပ် screen is
+// split by game — 2D / 3D / ဘောပွဲ (1D) — each with its own natural period
+// on the picked date (shared state.adminDate, same calendar as the other
+// screens):
+//   2D  = the week containing the date (Mon–Fri; Friday-evening total).
+//   3D  = the round containing the date (1st or 16th draw).
+//   1D  = the picked day itself.
+// The top cards, the per-user list and (1D only) the football/hedge nets all
+// follow the tab + date. The pending top-up/withdraw rows stay GLOBAL —
+// they are "waiting right now", not period totals. ကစားသမား counts only
+// players who bet in the shown period (not every registered player).
+// No manual "close the week" action: the week is computed from the date, so
+// on Monday the picked date's week is the new week — tap the calendar back
+// to Friday (or Yesterday) to see last week's closed total.
+function setSumTab(t) {
+  if (t !== '2d' && t !== '3d' && t !== 'fb') return;
+  state.sumTab = t;
+  document.querySelectorAll('[data-sum]').forEach(function (b) {
+    b.classList.toggle('on', b.dataset.sum === t);
+  });
+  renderSummary();
+}
 function renderSummary() {
   if (!state.loaded) return;
-  const t2 = state.bets2d.reduce(function (a, b) { return a + (b.total || 0); }, 0);
-  const t3 = state.bets3d.reduce(function (a, b) { return a + (b.total || 0); }, 0);
-  const tf = state.betsFb.reduce(function (a, b) { return a + (b.stake || 0); }, 0);
-  const n = state.bets2d.length + state.bets3d.length + state.betsFb.length;
-  $('sumStake').textContent = fmt(t2 + t3 + tf);
-  $('sumBets').textContent = n;
-  $('sumPlayers').textContent = state.players.length;
-  $('sum2d').textContent = fmt(t2) + ' ကျပ်';
-  $('sum3d').textContent = fmt(t3) + ' ကျပ်';
-  $('sumFb').textContent = fmt(tf) + ' ကျပ်';
-  // Football net for the Daily summary (v1.6, Pho Nov 15): the bookie's net
-  // on settled football bets, with the 1.5% rebate applied behind the
-  // scenes (wins x0.965, losses x0.985 — no commission line shown).
-  // footballDailyTotal is the PLAYERS' net, so the bookie's net is its negative.
+  const ymd = ensureAdminDate();
+  const tab = state.sumTab || '2d';
+  const sess = state.sessions || [];
+  // Period for the active tab, and the bets in it. Bets whose date cannot be
+  // resolved are EXCLUDED here (L.betInRange / L.betOnDate) — see logic.js.
+  var bets = [], periodLabel = '';
+  if (tab === '2d') {
+    const w = L.weekRange(ymd) || { mon: ymd, fri: ymd };
+    bets = state.bets2d.filter(function (b) { return L.betInRange(b, sess, '2d', w.mon, w.fri); });
+    periodLabel = 'တပတ်: ' + L.fmtDateOnly(w.mon) + ' – ' + L.fmtDateOnly(w.fri);
+  } else if (tab === '3d') {
+    const r = L.roundForDate(ymd) || ymd;
+    bets = state.bets3d.filter(function (b) { return L.betOnDate(b, sess, '3d', r); });
+    periodLabel = 'ပွဲစဉ်: ' + L.fmtDateOnly(r);
+  } else {
+    bets = state.betsFb.filter(function (b) { return L.betOnDate(b, sess, 'fb', ymd); });
+    periodLabel = 'နေ့: ' + L.fmtDateOnly(ymd);
+  }
+  const amtOf = function (b) { return b.total || b.stake || 0; };
+  const stake = bets.reduce(function (a, b) { return a + amtOf(b); }, 0);
+  $('sumStake').textContent = fmt(stake);
+  $('sumBets').textContent = bets.length;
+  const perUser = {};
+  bets.forEach(function (b) { perUser[b.player] = (perUser[b.player] || 0) + amtOf(b); });
+  $('sumPlayers').textContent = Object.keys(perUser).length;
+  const plEl = $('sumPeriodLabel');
+  if (plEl) plEl.textContent = periodLabel;
+  $('sumPerUser').innerHTML = Object.keys(perUser).map(function (pid) {
+    return '<div class="bet-row"><span class="who">' + esc(playerName(pid)) + '</span><span class="amt">' + fmt(perUser[pid]) + ' ကျပ်</span></div>';
+  }).join('') || '<div class="muted">ယူဆာ မရှိသေးဘူး</div>';
+  // Football + hedge nets (1D tab only; the card hides on the 2D/3D tabs).
+  const fbWrap = $('sumFbWrap');
+  if (fbWrap) fbWrap.style.display = tab === 'fb' ? '' : 'none';
   const fbById = {};
   state.fixtures.forEach(function (f) { fbById[f.id] = f; });
   const fbNetEl = $('sumFbNet');
-  if (fbNetEl) fbNetEl.textContent = fmt(-L.footballDailyTotal(state.betsFb, fbById, state.settings || {})) + ' ကျပ်';
+  if (fbNetEl) fbNetEl.textContent = fmt(-L.footballDailyTotal(bets, fbById, state.settings || {})) + ' ကျပ်';
   // Bettor profit/loss detail (Pho Nov 15 09:00): each settled football bet
   // shows gross (net), e.g. '+100000 (+95000)'; Total = sum of nets
   // (Pho's example: +95000 and -100000 total -5000). This is the PLAYERS'
   // view; the bookie's net above is its negative.
   let fbTotal = 0;
   const fbLines = [];
-  (state.betsFb || []).forEach(function (b) {
+  bets.forEach(function (b) {
     const d = L.footballDailyDetail(b, fbById, state.settings || {});
     if (!d) return;
     fbTotal += d.net;
@@ -1321,12 +1366,15 @@ function renderSummary() {
   // Hedge profit/loss (v1.6, Pho Nov 15 08:56): the 1.5% rebate lives HERE,
   // in the hedge profit/loss — win x0.965, loss x0.985. Each settled hedge
   // shows gross (net), e.g. '+10000 (+9650)'; Total = sum of nets (Pho's
-  // example: +9650 and -9850 total -200). Hedges keyed by api_id.
+  // example: +9650 and -9850 total -200). Hedges keyed by api_id, filtered
+  // to the picked day by their fixture's kickoff Yangon date.
   const fxByApi = {};
   state.fixtures.forEach(function (f) { if (f.api_id) fxByApi[f.api_id] = f; });
   let hedgeTotal = 0;
   const hedgeLines = [];
   (state.hedges || []).forEach(function (h) {
+    const fx = fxByApi[h.fixture];
+    if (!fx || L.yangonDateOf(fx.kickoff) !== ymd) return;
     const s = L.settleHedge(h, fxByApi);
     if (!s) return;
     const net = L.hedgeDailyResult(h, fxByApi);
@@ -1345,14 +1393,7 @@ function renderSummary() {
       ? hedgeLines.map(function (l) { return '<div>' + esc(l) + '</div>'; }).join('') + '<div><b>Total ' + fmt(hedgeTotal) + '</b></div>'
       : '<div>အကန် မရှိသေးပါ</div>';
   }
-  const perUser = {};
-  state.players.forEach(function (p) { perUser[p.id] = 0; });
-  state.bets2d.forEach(function (b) { perUser[b.player] = (perUser[b.player] || 0) + (b.total || 0); });
-  state.bets3d.forEach(function (b) { perUser[b.player] = (perUser[b.player] || 0) + (b.total || 0); });
-  state.betsFb.forEach(function (b) { perUser[b.player] = (perUser[b.player] || 0) + (b.stake || 0); });
-  $('sumPerUser').innerHTML = Object.keys(perUser).map(function (pid) {
-    return '<div class="bet-row"><span class="who">' + esc(playerName(pid)) + '</span><span class="amt">' + fmt(perUser[pid]) + ' ကျပ်</span></div>';
-  }).join('') || '<div class="muted">ယူဆာ မရှိသေးဘူး</div>';
+  // Pending top-up/withdraw — GLOBAL, not period totals.
   const pend = state.requests.filter(function (r) { return r.status === 'pending'; });
   const inR = pend.filter(function (r) { return r.kind === 'topup'; });
   const outR = pend.filter(function (r) { return r.kind === 'withdraw'; });
@@ -1523,6 +1564,7 @@ window.setBsTab = setBsTab;
 window.setAdminPeriod = setAdminPeriod;
 window.copyBs = copyBs;
 window.setLedTab = setLedTab;
+window.setSumTab = setSumTab;
 window.setBlockedGame = setBlockedGame;
 window.addBlocked = addBlocked;
 window.removeBlocked = removeBlocked;
@@ -1555,7 +1597,7 @@ window.saveHedgeSheet = saveHedgeSheet;
 
 // Named exports for Node tests (browser module load ignores them).
 export { timeFromCloseAt, resText, betStatusText, betStatusClass, legLine, fbDetailHtml, nextAccountNumber };
-export { renderAll, renderBets, renderLedger2D, renderLedger3D, renderLedgerFb, renderBs, bsText, recomputeFromLive, setBsTab, setLedTab };
+export { renderAll, renderBets, renderLedger2D, renderLedger3D, renderLedgerFb, renderBs, bsText, recomputeFromLive, setBsTab, setLedTab, setSumTab, renderSummary };
 export { ensureAdminDate, setAdminDate, syncAdminDateText, openAdminCal, closeAdminCal, renderAdminCal, adminCalMove, adminCalPick, adminCalQuick };
 export { resolveAdminPeriod, setAdminPeriod, syncAdminPeriod };
 // Test hook (Node tests only): replace the live state + aggregates wholesale
