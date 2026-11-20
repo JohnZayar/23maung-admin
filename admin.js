@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.13';
+import * as L from './logic.js?v=2.14';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -1327,14 +1327,8 @@ function renderSummary() {
   const amtOf = function (b) { return b.total || b.stake || 0; };
   const stake = bets.reduce(function (a, b) { return a + amtOf(b); }, 0);
   $('sumStake').textContent = fmt(stake);
-  const perUser = {};
-  bets.forEach(function (b) { perUser[b.player] = (perUser[b.player] || 0) + amtOf(b); });
   const plEl = $('sumPeriodLabel');
   if (plEl) plEl.textContent = periodLabel;
-  const perUserIds = Object.keys(perUser);
-  $('sumPerUser').innerHTML = perUserIds.map(function (pid) {
-    return '<div class="bet-row"><span class="who">' + esc(playerName(pid)) + '</span><span class="amt">' + fmt(perUser[pid]) + ' ကျပ်</span></div>';
-  }).join('') + (perUserIds.length ? '<div class="bet-row"><span class="who"><b>Total</b></span><span class="amt"><b>' + fmt(stake) + ' ကျပ်</b></span></div>' : '<div class="muted">ယူဆာ မရှိသေးဘူး</div>');
   // Football + hedge nets (1D tab only; the card hides on the 2D/3D tabs).
   const fbWrap = $('sumFbWrap');
   if (fbWrap) fbWrap.style.display = tab === 'fb' ? '' : 'none';
@@ -1348,10 +1342,12 @@ function renderSummary() {
   // view; the bookie's net above is its negative.
   let fbTotal = 0;
   const fbLines = [];
+  const fbNetByUser = {}; // bookie's net per player (v2.14): -player profit
   bets.forEach(function (b) {
     const d = L.footballDailyDetail(b, fbById, state.settings || {});
     if (!d) return;
     fbTotal += d.net;
+    fbNetByUser[b.player] = (fbNetByUser[b.player] || 0) - d.net;
     const gs = (d.gross >= 0 ? '+' : '') + fmt(d.gross);
     const ns = (d.net >= 0 ? '+' : '') + fmt(d.net);
     fbLines.push(gs + ' (' + ns + ')');
@@ -1367,15 +1363,32 @@ function renderSummary() {
   // a session not drawn yet is excluded entirely. Football: -fbTotal (the
   // bookie's net; fbLines holds settled bets only). '—' when nothing in the
   // period is settled yet; negative shows red via the warn class.
-  let netTxt = '—', netNeg = false;
+  let netTxt = '—', netNeg = false, netVal = null;
   if (tab === 'fb') {
-    if (fbLines.length) { const n = -fbTotal; netTxt = fmt(n); netNeg = n < 0; }
+    if (fbLines.length) { const n = -fbTotal; netTxt = fmt(n); netNeg = n < 0; netVal = n; }
   } else {
     const r = L.periodNet2D3D(bets, sess, state.settings || {}, tab);
-    if (r.settled > 0) { netTxt = fmt(r.net); netNeg = r.net < 0; }
+    if (r.settled > 0) { netTxt = fmt(r.net); netNeg = r.net < 0; netVal = r.net; }
   }
   const netEl = $('sumNet'); if (netEl) netEl.textContent = netTxt;
   const netStat = $('sumNetStat'); if (netStat) netStat.classList.toggle('warn', netNeg);
+  // Per-user NET (v2.14, Pho Nov 20): the list shows ONLY each user's
+  // remaining money (profit/loss), never the stake. 2D/3D via
+  // L.periodNetByUser (settled sessions only, option A); football via the
+  // settled detail lines above. Users with no settled bet in the period
+  // do not appear. Signed (+ profit / - loss), red when negative.
+  const perUserNet = tab === 'fb' ? fbNetByUser : L.periodNetByUser(bets, sess, state.settings || {}, tab);
+  const perUserIds = Object.keys(perUserNet);
+  const netRow = function (label, n, bold) {
+    const sign = n >= 0 ? '+' : '';
+    const cls = n < 0 ? ' class="amt neg"' : ' class="amt"';
+    const w = bold ? '<b>' + label + '</b>' : label;
+    const v = bold ? '<b>' + sign + fmt(n) + ' ကျပ်</b>' : sign + fmt(n) + ' ကျပ်';
+    return '<div class="bet-row"><span class="who">' + w + '</span><span' + cls + '>' + v + '</span></div>';
+  };
+  $('sumPerUser').innerHTML = perUserIds.length
+    ? perUserIds.map(function (pid) { return netRow(esc(playerName(pid)), perUserNet[pid], false); }).join('') + netRow('Total', netVal, true)
+    : '<div class="muted">ယူဆာ မရှိသေးဘူး</div>';
   // Hedge profit/loss (v1.6, Pho Nov 15 08:56): the 1.5% rebate lives HERE,
   // in the hedge profit/loss — win x0.965, loss x0.985. Each settled hedge
   // shows gross (net), e.g. '+10000 (+9650)'; Total = sum of nets (Pho's
