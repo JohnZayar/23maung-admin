@@ -139,7 +139,9 @@ export function netSide(x, y, xName, yName) {
 // each entry carries its kickoff_utc and the list is sorted by kickoff
 // (earliest first, unknown kickoff last) — Admin v1.7 (Pho Nov 15: the
 // ledger must show match time in time order so a passed match is obvious).
-export function computeBodyNet(fbBets, fixturesById) {
+// Home/away_mm are threaded too (Admin v2.18, Pho Nov 21: Burmese-first
+// team names; English fallback when the fixture has no _mm).
+export function computeBodyNet(fbBets, fixturesById, oddsByFixture) {
   const byKey = {};
   (fbBets || []).forEach(function (b) {
     if (b.type !== 'body') return;
@@ -167,7 +169,24 @@ export function computeBodyNet(fbBets, fixturesById) {
   if (fixturesById) {
     list.forEach(function (m) {
       const fx = fixturesById[m.key];
-      if (fx) { const ko = normalizeKickoff(fx.kickoff_utc); if (ko !== null) m.kickoff_utc = ko; }
+      if (fx) {
+        const ko = normalizeKickoff(fx.kickoff_utc); if (ko !== null) m.kickoff_utc = ko;
+        if (fx.home_mm) m.home_mm = fx.home_mm;
+        if (fx.away_mm) m.away_mm = fx.away_mm;
+      }
+    });
+  }
+  // Admin v2.18 (Pho Nov 21): a match with no goal bets has no goal line
+  // from the bets — fall back to the match's own odds (m23_odds), so the
+  // goal column always shows a line like Pho's paper spec. Same for the
+  // body line on goal-only matches. Bet lines always win over the
+  // fixture's lines; no odds row -> the line stays blank.
+  if (oddsByFixture) {
+    list.forEach(function (m) {
+      const o = oddsByFixture[m.key];
+      if (!o) return;
+      if (!m.bodyOdds) m.bodyOdds = o.hcp || lineToMyanmar(o.ah_line) || '';
+      if (!m.goalOdds) m.goalOdds = o.goal_line || lineToMyanmar(o.gl_line) || '';
     });
   }
   return sortBodyNetByKickoff(list);
@@ -671,7 +690,7 @@ export function remainingAfterHedge(net, hedgeAmt) {
 }
 // Ledger card header: '[bodyOdds] [Home short] & [Away short] / {[goalOdds]}'.
 export function ledgerHeaderText(m) {
-  const hs = teamShort(m.home), as = teamShort(m.away);
+  const hs = teamShort(m.home_mm || m.home), as = teamShort(m.away_mm || m.away);
   const b = m.bodyOdds || '';
   const g = m.goalOdds || '';
   return (b ? b + ' ' : '') + hs + ' & ' + as + (g ? ' / {' + g + '}' : '');
@@ -686,9 +705,9 @@ export function ledgerFbTableRow(m) {
   const ko = m ? formatKickoffYangon(m.kickoff_utc) : null;
   return {
     time: ko || '',
-    homeTeam: teamShort((m && m.home) || ''),
+    homeTeam: teamShort((m && m.home_mm) || (m && m.home) || ''),
     homeLine: (m && m.bodyOdds) || '',
-    awayTeam: teamShort((m && m.away) || ''),
+    awayTeam: teamShort((m && m.away_mm) || (m && m.away) || ''),
     goalLine: (m && m.goalOdds) || '',
     h: (m && m.h) || 0,
     a: (m && m.a) || 0,
@@ -719,13 +738,23 @@ export function hedgeLineText(h) {
   }
   return 'အကန် ' + (h.team || '') + ' ' + (h.amount || 0);
 }
+// Resolve a leg's team name Burmese-first (v2.18, Pho Nov 21): the
+// fixture row's _mm when present, else the leg's English name. `which`
+// is 'h' or 'a'. fixturesById is optional — without it, English.
+export function legTeamName(leg, which, fixturesById) {
+  const fx = (fixturesById || {})[(leg && leg.fixture) || ''];
+  if (fx) return which === 'h' ? (fx.home_mm || fx.home || leg.home || '') : (fx.away_mm || fx.away || leg.away || '');
+  return which === 'h' ? (leg.home || '') : (leg.away || '');
+}
 // Group body bets by bettor name -> [{ name, lines: [entryLineText] }].
 // betsFb: body bets (type 'body'); nameOf: (playerId) -> display name.
+// fixturesById (optional): map fixture PB id -> fixture row; when given,
+// team names are Burmese-first via legTeamName (v2.18).
 // Bettors sorted ascending by name; a bettor's lines in bet order.
 // A leg becomes one entry: body -> its picked team; goal -> the match's
 // home team (short) with the over/under arrow (goal lines carry no team
 // of their own; Pho's format puts the home team there).
-export function groupBettorEntries(betsFb, nameOf) {
+export function groupBettorEntries(betsFb, nameOf, fixturesById) {
   const byName = {};
   const order = [];
   (betsFb || []).forEach(function (b) {
@@ -734,10 +763,10 @@ export function groupBettorEntries(betsFb, nameOf) {
     if (!byName[name]) { byName[name] = []; order.push(name); }
     (b.legs || []).forEach(function (leg) {
       if (leg.kind === 'body') {
-        const team = teamShort(leg.pick === 'h' ? leg.home : leg.away);
+        const team = teamShort(legTeamName(leg, leg.pick === 'h' ? 'h' : 'a', fixturesById));
         byName[name].push(entryLineText({ kind: 'body', odds: leg.hcp || lineToMyanmar(leg.ah_line) || '', team: team, amount: leg.stake || 0 }));
       } else if (leg.kind === 'goal') {
-        const team = teamShort(leg.home);
+        const team = teamShort(legTeamName(leg, 'h', fixturesById));
         byName[name].push(entryLineText({ kind: 'goal', odds: leg.over || lineToMyanmar(leg.gl_line) || '', team: team, side: leg.pick, amount: leg.stake || 0 }));
       }
     });
@@ -812,7 +841,7 @@ export function ledgerCopyText(matches, hedgeByKey) {
     lines.push(ledgerHeaderText(m));
     lines.push((m.h || 0) + ' ' + (m.a || 0) + ' ⬆️' + (m.over || 0));
     lines.push('⬇️' + (m.under || 0));
-    const bTxt = bRem === 0 ? 'မျှ' : (bn.side === 'h' ? teamShort(m.home) : teamShort(m.away)) + ' ' + bRem;
+    const bTxt = bRem === 0 ? 'မျှ' : (bn.side === 'h' ? teamShort(m.home_mm || m.home) : teamShort(m.away_mm || m.away)) + ' ' + bRem;
     const gTxt = gRem === 0 ? 'မျှ' : '{' + (gn.side === 'over' ? '⬆️' : '⬇️') + gRem + '}';
     lines.push(bTxt + ' ' + gTxt);
     const hl = [];
@@ -992,11 +1021,16 @@ export function settleHedge(h, fixturesByApiId) {
   const amount = h.amount || 0;
   let leg = null;
   if (h.kind === 'body') {
-    const homeShort = teamShort(h.home || fx.home);
-    const awayShort = teamShort(h.away || fx.away);
+    // Team names are Burmese-first since v2.18 (Pho Nov 21): new hedges
+    // store the Burmese short name, old ones the English short name —
+    // match either so old hedges still settle.
+    const homeShort = teamShort(fx.home_mm || h.home || fx.home);
+    const awayShort = teamShort(fx.away_mm || h.away || fx.away);
+    const homeShortEn = teamShort(h.home || fx.home);
+    const awayShortEn = teamShort(h.away || fx.away);
     let pick = null;
-    if (h.team === homeShort) pick = 'h';
-    else if (h.team === awayShort) pick = 'a';
+    if (h.team === homeShort || h.team === homeShortEn) pick = 'h';
+    else if (h.team === awayShort || h.team === awayShortEn) pick = 'a';
     else return null;
     leg = { kind: 'body', pick: pick, ah_line: line };
   } else if (h.kind === 'goal') {
