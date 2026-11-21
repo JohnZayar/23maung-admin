@@ -350,6 +350,29 @@ function legLine(l, withTime, fixturesById) {
   }
   return s + ' · ' + resText(l.res);
 }
+// One leg as HTML (Admin v2.24, Pho Nov 21 20:26 — 'မောင်တွေကဘာထိုးထားမှန်းမသိရဘူး
+// ကာလာနုနုနဲ့ခွဲပေးပါ'): the PICKED side gets a soft-color pill so the pick
+// reads at a glance — body: the picked team (soft green); goal: ဂိုးပေါ် soft
+// blue / ဂိုးအောက် soft green. Every text part is esc()'d — only the spans
+// are raw HTML. legLine (plain text) stays for the copy path (bsText).
+function legLineHtml(l, withTime, fixturesById) {
+  const h = teamName(l, 'h'), a = teamName(l, 'a');
+  let s;
+  if (l.kind === 'goal') {
+    const cls = l.pick === 'over' ? 'pk-goal-over' : 'pk-goal-under';
+    const word = l.pick === 'over' ? 'ဂိုးပေါ်' : 'ဂိုးအောက်';
+    s = esc(h) + ' vs ' + esc(a) + ' · <span class="' + cls + '">' + word + (l.over ? ' ' + esc(l.over) : '') + '</span>';
+  } else if (l.pick === 'h') {
+    s = '<span class="pk-team">' + esc(h) + '</span>' + (l.hcp ? ' ' + esc(l.hcp) : '') + ' vs ' + esc(a);
+  } else {
+    s = esc(h) + ' vs <span class="pk-team">' + esc(a) + '</span>' + (l.hcp ? ' ' + esc(l.hcp) : '');
+  }
+  if (withTime) {
+    const t = L.legKickoffTime(l, fixturesById);
+    if (t) s += ' · ' + t;
+  }
+  return s + ' · ' + resText(l.res);
+}
 // Status badge line (with payout when settled) + one .fb-leg per leg.
 // withTime: append each leg's kickoff time (fixturesById map passed by the
 // caller; defaults to the live state.fixtures when omitted).
@@ -361,7 +384,7 @@ function fbDetailHtml(b, withTime, fixturesById) {
   let out = '<div class="fb-leg"><span class="badge ' + betStatusClass(b) + '">' + esc(txt) + '</span></div>';
   const fxMap = withTime ? (fixturesById || fxById()) : null;
   (b.legs || []).forEach(function (l) {
-    out += '<div class="fb-leg">' + esc(legLine(l, withTime, fxMap)) + '</div>';
+    out += '<div class="fb-leg">' + legLineHtml(l, withTime, fxMap) + '</div>';
   });
   return out;
 }
@@ -1753,7 +1776,7 @@ window.updateHedgeRemain = updateHedgeRemain;
 window.saveHedgeSheet = saveHedgeSheet;
 
 // Named exports for Node tests (browser module load ignores them).
-export { timeFromCloseAt, resText, betStatusText, betStatusClass, legLine, fbDetailHtml, nextAccountNumber };
+export { timeFromCloseAt, resText, betStatusText, betStatusClass, legLine, legLineHtml, fbDetailHtml, nextAccountNumber };
 export { renderAll, renderBets, renderLedger2D, renderLedger3D, renderLedgerFb, renderBs, bsText, recomputeFromLive, setBsTab, setLedTab, setSumTab, renderSummary };
 export { renderBsBody, openHedgeSheet, updateHedgeRemain }; // test hooks (v2.19)
 export { ensureAdminDate, setAdminDate, syncAdminDateText, openAdminCal, closeAdminCal, renderAdminCal, adminCalMove, adminCalPick, adminCalQuick };
