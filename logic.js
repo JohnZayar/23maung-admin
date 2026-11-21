@@ -1324,9 +1324,36 @@ export async function settleSession(pb, session, bets, settings) {
   return { settled: settled, winners: winners, paidOut: paidOut };
 }
 
+// Auto-settle toggle (Admin v2.16, Pho Nov 21 06:59).
+// ONE toggle in the Admin app: Auto ON = the VPS job settles finished
+// matches by itself every 30 min; Auto OFF = the VPS job skips
+// settlement and Admin settles by hand from the Results screen
+// (စာရင်းချုပ် button -> settleFootballNow + Summary screen).
+// The toggle's value lives in m23_settings.body_comm_small — a DEAD
+// field (small-match body commission, unused since schema §7 Q4 settled
+// everything at 5%; NO code reads it). It is used ONLY because
+// PocketBase silently drops unknown fields on record update, so a
+// dedicated `auto_settle_fb` boolean cannot be written from the Admin
+// app until the live m23_settings schema gains that field (a live
+// schema change — needs Pho's approval). Until then:
+//   body_comm_small === 0  -> Auto OFF
+//   anything else, incl. missing / seed 8 -> Auto ON (default ON).
+// When the schema gains auto_settle_fb, switch these two helpers to
+// it — the Admin toggle and the VPS gate both read through here.
+export function isAutoSettleOn(settings) {
+  const s = settings || {};
+  return s.body_comm_small !== 0;
+}
+export function autoSettlePatch(nextOn) {
+  return { body_comm_small: nextOn ? 8 : 0 };
+}
+
 // Settle football bets whose fixtures are finished. Bets with any leg still
 // open (fixture not finished) are skipped and left status=open.
 // Winners are credited via wallet_tx kind win_fb (+payout) + balance.
+// NOTE: settlement NEVER touches m23_fixtures — in manual mode (Auto OFF)
+// unsettled fixtures stay listed on the Results screen for Admin to
+// check; only bets/players/wallet_tx are written.
 export async function settleFootball(pb, fbBets, fixturesById, settings) {
   const balances = {};
   let settled = 0, winners = 0, paidOut = 0, skipped = 0;

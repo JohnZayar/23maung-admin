@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.15';
+import * as L from './logic.js?v=2.16';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -725,6 +725,10 @@ function renderResults() {
   const pending = state.fixtures.filter(function (f) { return f.status !== 'finished'; }).length;
   const wR = $('wRes'); if (wR) wR.textContent = pending + ' ပွဲ';
   const hbR = $('hbRes'); if (hbR) hbR.textContent = pending + ' ပွဲ';
+  // Auto-settle toggle state (Admin v2.16): reflect the persisted setting
+  // (default ON). Null-guarded like the other fills — the toggle element
+  // is missing only in a stale cached page.
+  const tgl = $('autoSettleTgl'); if (tgl) tgl.classList.toggle('on', L.isAutoSettleOn(state.settings));
 }
 
 // fillWinInputs (v2.1, Pho Nov 16): after a save+reload the win inputs
@@ -783,6 +787,44 @@ async function settleFootballNow() {
     toast('ဘောပွဲ စာရင်းချုပ် — ' + r.settled + ' ကွက်၊ ' + fmt(r.paidOut) + ' ကျပ်');
   } catch (e) {
     toast('settle လုပ်လို့ မရဘူး — ' + (e.message || 'error'));
+  }
+}
+
+// Manual settle (Admin v2.16, Pho Nov 21 06:59): the Results screen
+// စာရင်းချုပ် button. Used when Auto is OFF — Admin checks the results
+// here first, then taps: settle all open finished-match bets, then show
+// the Summary screen. In Auto ON mode the same button settles NOW
+// instead of waiting for the next 30-min VPS run (settlement is
+// idempotent, so tapping twice is harmless).
+async function settleFootballManual() {
+  await settleFootballNow();
+  go('scr-summary');
+}
+
+// Auto-settle ON/OFF toggle (Admin v2.16, Pho Nov 21 06:59): ONE toggle
+// on the Results screen. Persists to m23_settings via L.autoSettlePatch
+// (carrier field body_comm_small — see logic.js; default ON). The VPS
+// job reads the same value before settling. Mirrors toggleSession's
+// football branch: flip + write + reflect, never throw.
+async function toggleAutoSettle(btn) {
+  if (!state.loaded) {
+    btn.classList.toggle('on');
+    toast(btn.classList.contains('on') ? 'Auto settle ဖွင့်ပြီ' : 'Auto settle ပိတ်ပြီ');
+    return;
+  }
+  const curOn = L.isAutoSettleOn(state.settings);
+  const next = !curOn;
+  try {
+    if (state.settingsId) {
+      state.settings = await PB.update('m23_settings', state.settingsId, L.autoSettlePatch(next));
+    } else {
+      state.settings = await PB.create('m23_settings', Object.assign({ key: 'main' }, L.autoSettlePatch(next)));
+      state.settingsId = state.settings.id;
+    }
+    btn.classList.toggle('on', next);
+    toast('Auto settle ' + (next ? 'ဖွင့်ပြီ' : 'ပိတ်ပြီ'));
+  } catch (e) {
+    toast('ပြောင်းလို့ မရဘူး — ' + (e.message || 'error'));
   }
 }
 
@@ -1606,6 +1648,8 @@ window.toggleSession = toggleSession;
 window.onLimitChange = onLimitChange;
 window.loginAdmin = loginAdmin;
 window.settleFootballNow = settleFootballNow;
+window.settleFootballManual = settleFootballManual;
+window.toggleAutoSettle = toggleAutoSettle;
 window.openFbSum = openFbSum;
 window.renderFbSum = renderFbSum;
 window.copyFbSum = copyFbSum;

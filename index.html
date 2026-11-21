@@ -204,7 +204,7 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.15</span></div>
+<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.16</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
@@ -326,6 +326,13 @@
     <div class="bet-row"><span>ဖူလ်ဟမ် vs နယူးကာဆယ်</span><b>1 – 1</b></div>
     </div>
     <div class="muted" style="margin-top:6px" id="fbResNote">07.11.2026 ရလဒ် (နမူနာ) · 21.11.2026 ပွဲတွေ ပြီးရင် ဒီမှာ auto ပေါ်မယ်</div>
+    <!-- Auto settle toggle + manual settle (Admin v2.16, Pho Nov 21 06:59):
+         ONE toggle — ON = VPS settles by itself; OFF = Admin checks here,
+         then taps စာရင်းချုပ် to settle + show the summary. These controls
+         sit OUTSIDE #fbResults on purpose: renderResults() rewrites that
+         div's innerHTML, which would clobber anything inside it. -->
+    <div class="set-row" style="margin-top:10px"><span>Auto settle</span><button class="toggle on" id="autoSettleTgl" onclick="toggleAutoSettle(this)" aria-label="Auto settle on/off"></button></div>
+    <button class="btn-navy" style="margin-top:8px" onclick="settleFootballManual()">စာရင်းချုပ်</button>
   </div>
   <div class="sect">2D / 3D ပေါက်ဂဏန်း</div>
   <div class="card">
@@ -493,6 +500,6 @@
 <!-- record date picker calendar popup (Admin v2.3) -->
 <div id="adminCalOverlay" onclick="if(event.target===this)closeAdminCal()"><div class="acal-card" id="adminCalCard"></div></div>
 
-<script type="module" src="admin.js?v=2.15"></script>
+<script type="module" src="admin.js?v=2.16"></script>
 </body>
 </html>
