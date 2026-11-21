@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.17';
+import * as L from './logic.js?v=2.18';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -17,6 +17,7 @@ const state = {
   players: [],         // m23_players
   bets2d: [], bets3d: [], betsFb: [],
   fixtures: [],        // m23_fixtures
+  oddsByFixture: {},  // m23_odds by fixture id (Admin v2.18: goal/body line fallback for the ledger table)
   txs: [],             // m23_wallet_tx (summary only)
   hedges: [],          // m23_hedges (Admin v1.6)
   hedgeByMatch: {},   // match key -> {body, goal} hedge rows
@@ -200,6 +201,15 @@ async function loadAll(quiet) {
     state.bets3d = await PB.getAll('m23_bets_3d', { sort: '-created' });
     state.betsFb = await PB.getAll('m23_bets_fb', { sort: '-created' });
     state.fixtures = await PB.getAll('m23_fixtures', { sort: '-kickoff_utc' });
+    // Odds (Admin v2.18, Pho Nov 21): the ledger table shows each match's
+    // goal/body line even when nobody bet on that side — the line comes
+    // from m23_odds (the feed's per-fixture odds, keyed by fixture id).
+    // Own try/catch like hedges: a missing collection must not break the load.
+    try {
+      const oddsRows = await PB.getAll('m23_odds', { sort: '-created' });
+      state.oddsByFixture = {};
+      oddsRows.forEach(function (r) { if (r.fixture) state.oddsByFixture[r.fixture] = r; });
+    } catch (e2) { state.oddsByFixture = {}; }
     state.txs = await PB.getAll('m23_wallet_tx', { sort: '-created', perPage: 200 });
     // Hedges (v1.6): own try/catch — a missing m23_hedges collection must
     // not break the whole load (until it exists, there are simply no hedges).
@@ -251,24 +261,27 @@ function recomputeFromLive() {
       return { n: playerName(b.player) + ' — မောင်း ' + (b.legs || []).length + ' ပွဲ', v: b.stake || 0, bet: b };
     }))
   };
-  BODY_NET = L.computeBodyNet(bf, fxById());
+  BODY_NET = L.computeBodyNet(bf, fxById(), state.oddsByFixture);
   state.hedgeByMatch = L.indexHedgesByMatch(state.hedges, state.fixtures);
   const pend = state.requests.filter(function (r) { return r.status === 'pending'; });
   pendIn = pend.filter(function (r) { return r.kind === 'topup'; }).length;
   pendOut = pend.filter(function (r) { return r.kind === 'withdraw'; }).length;
 }
 
+// Team names are Burmese-first (v2.18, Pho Nov 21 — 'မြန်မာပဲအဓိက'): teamName
+// prefers the fixture's home_mm/away_mm, English when the team has no
+// Burmese name — the same rule as the leg detail lines.
 function fbBetLabel(b) {
   const legs = b.legs || [];
   if (b.type === 'parlay') {
-    const teams = legs.map(function (l) { return l.pick === 'h' ? (l.home || '') : l.pick === 'a' ? (l.away || '') : (l.home || ''); });
+    const teams = legs.map(function (l) { return teamName(l, l.pick === 'a' ? 'a' : 'h'); });
     return 'မောင်း ' + legs.length + ' ပွဲ — ' + teams.join(' · ');
   }
   const l = legs[0] || {};
   if (l.kind === 'goal') {
-    return (l.pick === 'over' ? 'ဂိုးပေါ်' : 'အောက်') + ' — ' + (l.home || '') + ' vs ' + (l.away || '') + ' ' + (l.over || '');
+    return (l.pick === 'over' ? 'ဂိုးပေါ်' : 'အောက်') + ' — ' + teamName(l, 'h') + ' vs ' + teamName(l, 'a') + ' ' + (l.over || '');
   }
-  const team = l.pick === 'h' ? (l.home || '') : (l.away || '');
+  const team = teamName(l, l.pick === 'h' ? 'h' : 'a');
   return 'ဘော်ဒီ — ' + team + ' ' + (l.hcp || '');
 }
 
@@ -964,7 +977,12 @@ function renderLedgerFb() {
   // per-bet rows, limit red intact, same order as before.
   LEDFB.forEach(function (b) {
     if (!b.bet || b.bet.type !== 'parlay') return;
-    const head = '<div class="bet-row' + (b.amt > lim ? ' over' : '') + '"><span><span class="who">' + esc(b.user) + '</span><br><span class="what">' + esc(b.what) + '</span></span><span class="amt">' + fmt(b.amt) + ' ကျပ်</span></div>';
+    // Admin v2.18 (Pho Nov 21, annotated screenshot): the parlay head
+    // overflowed — the long 'မောင်း N ပွဲ — team · team · team' label
+    // pushed the amount off the right edge. 'wrap' lets the label wrap
+    // (same fix as the Bets tab, v2.3) and 'led-parlay-head' shrinks the
+    // text to 13px, so the amount always stays visible.
+    const head = '<div class="bet-row wrap led-parlay-head' + (b.amt > lim ? ' over' : '') + '"><span><span class="who">' + esc(b.user) + '</span><br><span class="what">' + esc(b.what) + '</span></span><span class="amt">' + fmt(b.amt) + ' ကျပ်</span></div>';
     const det = fbDetailHtml(b.bet);
     out += det ? '<div class="fb-bet">' + head + det + '</div>' : head;
   });
@@ -1003,7 +1021,7 @@ function renderBsBody() {
     var bn = L.bodyNetOf(m), gn = L.goalNetOf(m);
     var bRem = L.remainingAfterHedge(bn.net, hedges.body ? hedges.body.amount : 0);
     var gRem = L.remainingAfterHedge(gn.net, hedges.goal ? hedges.goal.amount : 0);
-    var bSide = bn.side === 'h' ? L.teamShort(m.home) : bn.side === 'a' ? L.teamShort(m.away) : '';
+    var bSide = bn.side === 'h' ? L.teamShort(m.home_mm || m.home) : bn.side === 'a' ? L.teamShort(m.away_mm || m.away) : '';
     var bTxt = bRem === 0 ? 'မျှ' : bSide + ' ' + fmt(bRem);
     var gTxt = gRem === 0 ? 'မျှ' : '{' + (gn.side === 'over' ? '⬆️' : '⬇️') + fmt(gRem) + '}';
     var hl = [];
@@ -1140,7 +1158,7 @@ function openFbSum() { renderFbSum(); go('scr-fbsum'); }
 function renderFbSum() {
   var w = $('fbsumList');
   if (!w) return;
-  var bettors = L.groupBettorEntries(state.betsFb, playerName);
+  var bettors = L.groupBettorEntries(state.betsFb, playerName, fxById());
   var hedges = L.groupHedgeEntries(state.hedges);
   var out = '';
   out += '<div class="fs-group"><div class="fs-head">ထိုးသားစာရင်း</div>';
@@ -1160,7 +1178,7 @@ function renderFbSum() {
   w.innerHTML = out;
 }
 function copyFbSum() {
-  var bettors = L.groupBettorEntries(state.betsFb, playerName);
+  var bettors = L.groupBettorEntries(state.betsFb, playerName, fxById());
   var hedges = L.groupHedgeEntries(state.hedges);
   var txt = L.fbsumCopyText(bettors, hedges);
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -1213,7 +1231,7 @@ function openHedgeSheet(idx) {
   // A row shows when the net > 0 OR a hedge already exists for that kind
   // (so an existing hedge on a 0 net can still be seen and cleared).
   if (bn.net > 0 || existing.body) {
-    var bSide = bn.side === 'h' ? L.teamShort(m.home) : bn.side === 'a' ? L.teamShort(m.away) : L.teamShort(m.home);
+    var bSide = bn.side === 'h' ? L.teamShort(m.home_mm || m.home) : bn.side === 'a' ? L.teamShort(m.away_mm || m.away) : L.teamShort(m.home_mm || m.home);
     body += hedgeSheetRow('body', 'ဘော်ဒီ — ' + bSide, bn.net, existing.body ? existing.body.amount : '', existing.body ? existing.body.bookie : '');
     hasRow = true;
   }
@@ -1284,8 +1302,8 @@ async function saveHedgeSheet() {
     away: m.away || '',
     bodyOdds: m.bodyOdds || '',
     goalOdds: m.goalOdds || '',
-    bodyTeam: hedgeCtx.bn.side === 'h' ? L.teamShort(m.home) : hedgeCtx.bn.side === 'a' ? L.teamShort(m.away) : L.teamShort(m.home),
-    goalTeam: L.teamShort(m.home)
+    bodyTeam: hedgeCtx.bn.side === 'h' ? L.teamShort(m.home_mm || m.home) : hedgeCtx.bn.side === 'a' ? L.teamShort(m.away_mm || m.away) : L.teamShort(m.home_mm || m.home),
+    goalTeam: L.teamShort(m.home_mm || m.home)
   };
   try {
     await L.saveHedges(PB, hedgeCtx.existing, matchInfo, drafts);
