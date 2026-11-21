@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.18';
+import * as L from './logic.js?v=2.19';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -1005,6 +1005,16 @@ function netSide(x, y, xName, yName) { return L.netSide(x, y, xName, yName); }
 // with odds header, amounts, red post-hedge net line and a gold hedge line.
 // TAP a card -> hedge bottom sheet. No summary totals on this screen.
 function amtCell(v) { return '<span class="' + (v ? '' : 'zero') + '">' + fmt(v || 0) + '</span>'; }
+// Gross stake with the post-hedge remaining in brackets (Admin v2.19, Pho
+// Nov 21): '75,000 (45,000)' — what was bet, then what is still exposed
+// after the hedge. Only the net side shows it.
+function grossRemText(v, hedgeAmt) {
+  var rem = Math.max(0, (v || 0) - (hedgeAmt || 0));
+  return fmt(v || 0) + (hedgeAmt ? ' (' + fmt(rem) + ')' : '');
+}
+function amtCellHedged(v, hedgeAmt) {
+  return '<span class="' + (v ? '' : 'zero') + '">' + grossRemText(v, hedgeAmt) + '</span>';
+}
 // Tap a passed match's card: no hedge sheet — the time has passed.
 function toastKickoffPassed() { toast('ပွဲချိန် ကျော်သွားပြီ'); }
 function renderBsBody() {
@@ -1016,11 +1026,16 @@ function renderBsBody() {
   var out = '';
   out += '<div class="ld-legend">⬆️ = ဂိုးပေါ် · ⬇️ = ဂိုးအောက် · {} = အကျန်</div>';
   out += '<div class="muted" style="margin:4px 0 8px">အကန် ထည့်ရန် / ပြင်ရန် ပွဲကို ဖိပါ · အချိန်အစဉ်လိုက်</div>';
+  var lim = limitOf('fb'); // per-bet limit for the over-limit excess (v2.19)
   BODY_NET.forEach(function (m, idx) {
     var hedges = state.hedgeByMatch[m.key] || {};
     var bn = L.bodyNetOf(m), gn = L.goalNetOf(m);
-    var bRem = L.remainingAfterHedge(bn.net, hedges.body ? hedges.body.amount : 0);
-    var gRem = L.remainingAfterHedge(gn.net, hedges.goal ? hedges.goal.amount : 0);
+    var bHedge = hedges.body ? hedges.body.amount : 0;
+    var gHedge = hedges.goal ? hedges.goal.amount : 0;
+    var bRem = L.remainingAfterHedge(bn.net, bHedge);
+    var gRem = L.remainingAfterHedge(gn.net, gHedge);
+    var bExcess = lim > 0 ? L.excessOverLimit(bRem, lim) : 0;
+    var gExcess = lim > 0 ? L.excessOverLimit(gRem, lim) : 0;
     var bSide = bn.side === 'h' ? L.teamShort(m.home_mm || m.home) : bn.side === 'a' ? L.teamShort(m.away_mm || m.away) : '';
     var bTxt = bRem === 0 ? 'မျှ' : bSide + ' ' + fmt(bRem);
     var gTxt = gRem === 0 ? 'မျှ' : '{' + (gn.side === 'over' ? '⬆️' : '⬇️') + fmt(gRem) + '}';
@@ -1036,9 +1051,16 @@ function renderBsBody() {
     var tap = passed ? 'toastKickoffPassed()' : 'openHedgeSheet(' + idx + ')';
     out += '<div class="' + cardCls + '" tabindex="0" role="button" onclick="' + tap + '" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();' + tap + ';}">';
     out += '<div class="ld-head"><span>' + esc(L.ledgerHeaderText(m)) + '</span>' + timeHtml + '</div>';
-    out += '<div class="ld-amt">' + amtCell(m.h) + amtCell(m.a) + '<span class="' + (m.over ? '' : 'zero') + '">⬆️' + fmt(m.over || 0) + '</span></div>';
-    out += '<div class="ld-under"><span class="' + (m.under ? '' : 'zero') + '">⬇️' + fmt(m.under || 0) + '</span></div>';
-    out += '<div class="ld-net"><span>အကျန်</span><span>' + esc(bTxt) + ' ' + esc(gTxt) + '</span></div>';
+    var hCell = bn.side === 'h' ? amtCellHedged(m.h, bHedge) : amtCell(m.h);
+    var aCell = bn.side === 'a' ? amtCellHedged(m.a, bHedge) : amtCell(m.a);
+    var overCell = '<span class="' + (m.over ? '' : 'zero') + '">⬆️' + (gn.side === 'over' ? grossRemText(m.over, gHedge) : fmt(m.over || 0)) + '</span>';
+    var underCell = '<span class="' + (m.under ? '' : 'zero') + '">⬇️' + (gn.side === 'under' ? grossRemText(m.under, gHedge) : fmt(m.under || 0)) + '</span>';
+    out += '<div class="ld-amt">' + hCell + aCell + overCell + '</div>';
+    out += '<div class="ld-under">' + underCell + '</div>';
+    var excTxt = '';
+    if (bExcess > 0) excTxt += ' <span style="color:#d92b2b">အကျွံ ' + fmt(bExcess) + '</span>';
+    if (gExcess > 0) excTxt += ' <span style="color:#d92b2b">ဂိုးအကျွံ ' + fmt(gExcess) + '</span>';
+    out += '<div class="ld-net"><span>အကျန်</span><span>' + esc(bTxt) + ' ' + esc(gTxt) + excTxt + '</span></div>';
     if (hl.length) out += '<div class="m-hedged">' + esc(hl.join(' · ')) + '</div>';
     out += '</div>';
   });
@@ -1200,10 +1222,11 @@ var hedgeCtx = null; // { idx, m, bn, gn, existing }
 function yangonToday() {
   return new Date(Date.now() + 6.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
-function hedgeSheetRow(kind, label, net, draftAmt, draftBookie) {
+function hedgeSheetRow(kind, label, net, draftAmt, draftBookie, lim) {
   var rem = L.remainingAfterHedge(net, draftAmt || 0);
+  var exc = lim > 0 ? L.excessOverLimit(rem, lim) : 0;
   return '<div class="hs-row" data-kind="' + kind + '">' +
-    '<div class="hs-label">' + esc(label) + ' · အကျန် <b>' + fmt(net) + '</b></div>' +
+    '<div class="hs-label">' + esc(label) + ' · အကျန် <b>' + fmt(net) + '</b><span style="color:#d92b2b" id="hg-exc-' + kind + '">' + (exc > 0 ? ' · အကျွံ <b>' + fmt(exc) + '</b>' : '') + '</span></div>' +
     '<div class="hs-inputs">' +
       '<input id="hg-amt-' + kind + '" type="number" min="0" step="500" inputmode="numeric" placeholder="ကန်မည့် ပမာဏ" value="' + (draftAmt || '') + '" oninput="updateHedgeRemain(\'' + kind + '\')">' +
       '<input id="hg-bookie-' + kind + '" type="text" list="bookieList" placeholder="အကန်ဒိုင် နာမည်" value="' + esc(draftBookie || '') + '">' +
@@ -1221,7 +1244,8 @@ function openHedgeSheet(idx) {
   if (!L.canHedgeMatch(m)) { toast('ပွဲချိန် ကျော်သွားပြီ'); return; }
   var bn = L.bodyNetOf(m), gn = L.goalNetOf(m);
   var existing = state.hedgeByMatch[m.key] || { body: null, goal: null };
-  hedgeCtx = { idx: idx, m: m, bn: bn, gn: gn, existing: existing };
+  var lim = limitOf('fb'); // per-bet limit for the over-limit excess (v2.19)
+  hedgeCtx = { idx: idx, m: m, bn: bn, gn: gn, existing: existing, lim: lim };
   $('hedgeSheetTitle').textContent = L.ledgerHeaderText(m);
   // Datalist of bookies already used (grows from Pho's entries).
   var dl = $('bookieList');
@@ -1232,12 +1256,12 @@ function openHedgeSheet(idx) {
   // (so an existing hedge on a 0 net can still be seen and cleared).
   if (bn.net > 0 || existing.body) {
     var bSide = bn.side === 'h' ? L.teamShort(m.home_mm || m.home) : bn.side === 'a' ? L.teamShort(m.away_mm || m.away) : L.teamShort(m.home_mm || m.home);
-    body += hedgeSheetRow('body', 'ဘော်ဒီ — ' + bSide, bn.net, existing.body ? existing.body.amount : '', existing.body ? existing.body.bookie : '');
+    body += hedgeSheetRow('body', 'ဘော်ဒီ — ' + bSide, bn.net, existing.body ? existing.body.amount : '', existing.body ? existing.body.bookie : '', lim);
     hasRow = true;
   }
   if (gn.net > 0 || existing.goal) {
     var gLabel = gn.side === 'over' ? '⬆️ ဂိုးပေါ်' : gn.side === 'under' ? '⬇️ ဂိုးအောက်' : 'ဂိုးပေါင်း';
-    body += hedgeSheetRow('goal', 'ဂိုးပေါင်း — ' + gLabel, gn.net, existing.goal ? existing.goal.amount : '', existing.goal ? existing.goal.bookie : '');
+    body += hedgeSheetRow('goal', 'ဂိုးပေါင်း — ' + gLabel, gn.net, existing.goal ? existing.goal.amount : '', existing.goal ? existing.goal.bookie : '', lim);
     hasRow = true;
   }
   if (!hasRow) body = '<div class="muted">မျှ — ကန်စရာ မရှိ</div>';
@@ -1266,6 +1290,10 @@ function updateHedgeRemain(kind) {
   var rem = L.remainingAfterHedge(net, amt);
   var remEl = $('hg-rem-' + kind);
   if (remEl) remEl.textContent = 'ကျန် ' + fmt(rem);
+  var lim = (hedgeCtx && hedgeCtx.lim) || 0;
+  var liveExc = lim > 0 ? L.excessOverLimit(rem, lim) : 0;
+  var excEl = $('hg-exc-' + kind);
+  if (excEl) excEl.innerHTML = liveExc > 0 ? ' · အကျွံ <b>' + fmt(liveExc) + '</b>' : '';
   var warnEl = $('hg-warn-' + kind);
   if (warnEl) warnEl.style.display = amt > net ? '' : 'none';
   if (inp) inp.classList.toggle('over', amt > net);
@@ -1728,6 +1756,7 @@ window.saveHedgeSheet = saveHedgeSheet;
 // Named exports for Node tests (browser module load ignores them).
 export { timeFromCloseAt, resText, betStatusText, betStatusClass, legLine, fbDetailHtml, nextAccountNumber };
 export { renderAll, renderBets, renderLedger2D, renderLedger3D, renderLedgerFb, renderBs, bsText, recomputeFromLive, setBsTab, setLedTab, setSumTab, renderSummary };
+export { renderBsBody, openHedgeSheet, updateHedgeRemain }; // test hooks (v2.19)
 export { ensureAdminDate, setAdminDate, syncAdminDateText, openAdminCal, closeAdminCal, renderAdminCal, adminCalMove, adminCalPick, adminCalQuick };
 export { resolveAdminPeriod, setAdminPeriod, syncAdminPeriod };
 // Test hook (Node tests only): replace the live state + aggregates wholesale
