@@ -197,6 +197,10 @@
      .bet-row .what ellipsis hid real bets behind '...'. Wrap instead. */
   .bet-row.wrap { align-items: flex-start; }
   .bet-row.wrap .what { white-space: normal; overflow: visible; text-overflow: clip; word-break: break-word; }
+  /* ledger parlay head (Admin v2.18, Pho Nov 21): long parlay labels
+     pushed the amount off the right edge — shrink the text to 13px
+     (with .wrap above) so the amount always stays visible. */
+  .bet-row.led-parlay-head { font-size: 13px; }
 </style>
 </head>
 <body>
@@ -212,7 +216,7 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.17</span></div>
+<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.18</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
@@ -508,6 +512,6 @@
 <!-- record date picker calendar popup (Admin v2.3) -->
 <div id="adminCalOverlay" onclick="if(event.target===this)closeAdminCal()"><div class="acal-card" id="adminCalCard"></div></div>
 
-<script type="module" src="admin.js?v=2.17"></script>
+<script type="module" src="admin.js?v=2.18"></script>
 </body>
 </html>
