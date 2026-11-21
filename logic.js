@@ -688,6 +688,11 @@ export function goalNetOf(m) {
 export function remainingAfterHedge(net, hedgeAmt) {
   return Math.max(0, (net || 0) - (hedgeAmt || 0));
 }
+// Over-limit excess (Admin v2.19, Pho Nov 21): how much of a remainder sits
+// above the per-bet limit — the amount Pho hedges away. 0 at/under the limit.
+export function excessOverLimit(rem, lim) {
+  return Math.max(0, (rem || 0) - (lim || 0));
+}
 // Ledger card header: '[bodyOdds] [Home short] & [Away short] / {[goalOdds]}'.
 export function ledgerHeaderText(m) {
   const hs = teamShort(m.home_mm || m.home), as = teamShort(m.away_mm || m.away);
