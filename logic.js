@@ -3,7 +3,7 @@
 // test-admin.mjs (Node tests with a fake PocketBase client).
 //
 // Rules implemented here come ONLY from:
-//   - 23maung-schema.md (rates 90x / 650x, commission tiers, approval side
+//   - 23maung-schema.md (rates 90x / 600x, commission tiers, approval side
 //     effects, settlement flow), and
 //   - the admin mockup v2.4's own functions (netSide, big/small "N = V").
 // Where the schema leaves a rule open it is marked OPEN below and the
@@ -382,7 +382,7 @@ export function betNet2D3D(bet, sessions, settings, game) {
   if (win === null) return null; // not drawn yet — excluded (Pho option A)
   const ratePer100 = game === '2d'
     ? (settings && settings.rate_2d !== undefined ? settings.rate_2d : 9000)
-    : (settings && settings.rate_3d !== undefined ? settings.rate_3d : 65000);
+    : (settings && settings.rate_3d !== undefined ? settings.rate_3d : 60000);
   return (bet.total || bet.stake || 0) - settle2D3DBet(bet, win, ratePer100).win_amount;
 }
 // periodNet2D3D (v2.13, Pho Nov 20, option A): net profit of 2D/3D bets in a
@@ -390,7 +390,7 @@ export function betNet2D3D(bet, sessions, settings, game) {
 // win_number (drawn). A bet whose session has no win_number yet is EXCLUDED
 // entirely — neither its stake nor any payout counts — so the net is the
 // settled profit so far. Payouts use settle2D3DBet, the same function the
-// app settles with (rate from settings, 2D 9000 / 3D 65000 per 100 by
+// app settles with (rate from settings, 2D 9000 / 3D 60000 per 100 by
 // default), so the net matches what the app actually pays out. Returns
 // {net, settled} where settled = number of bets counted.
 export function periodNet2D3D(bets, sessions, settings, game) {
@@ -1317,7 +1317,7 @@ export function settleFbBet(bet, fixturesById, settings) {
 }
 
 // ---- 2D / 3D settlement -----------------------------------------------------
-// ratePer100: 9000 (2D = 90x) / 65000 (3D = 650x). Direct and reverse are
+// ratePer100: 9000 (2D = 90x) / 60000 (3D = 600x). Direct and reverse are
 // counted separately: a winning direct line pays amt x rate; a winning
 // reverse line pays rev x rate. (For a palindrome such as 11, amt and rev
 // are both stakes on the same number, so both pay — same as the ledger
@@ -1376,7 +1376,7 @@ export async function settleSession(pb, session, bets, settings) {
   const collection = game === '2d' ? 'm23_bets_2d' : 'm23_bets_3d';
   const ratePer100 = game === '2d'
     ? (settings.rate_2d !== undefined ? settings.rate_2d : 9000)
-    : (settings.rate_3d !== undefined ? settings.rate_3d : 65000);
+    : (settings.rate_3d !== undefined ? settings.rate_3d : 60000);
   const winKind = game === '2d' ? 'win_2d' : 'win_3d';
   const balances = {}; // playerId -> current balance (read once, accumulated)
   let settled = 0, winners = 0, paidOut = 0;
