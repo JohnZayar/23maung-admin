@@ -215,7 +215,7 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.21</span></div>
+<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.22</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
@@ -288,8 +288,6 @@
 <!-- bets -->
 <div class="screen" id="scr-bets">
   <div class="acal-row"><button class="acal-btn" onclick="openAdminCal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h2M14 14h2M8 18h2M14 18h2"/></svg><span id="adminDateTextBets"></span></button></div>
-  <div class="muted" style="margin-bottom:10px">ယူဆာ တစ်ဦးစီ နှိပ်ပြီး အသေးစိတ် စာရင်း ကြည့်ပါ</div>
-  <div class="per-row"><button data-per="am" onclick="setAdminPeriod('am')">မနက်</button><button data-per="pm" onclick="setAdminPeriod('pm')">ညနေ</button><button data-per="both" onclick="setAdminPeriod('both')">နှစ်ခုလုံး</button></div>
   <div id="betsList">
   <div class="user-card" id="uc1">
     <div class="user-head" onclick="toggleUser('uc1')"><span>User001 <span class="arr">›</span></span><span class="tot">17,000 ကျပ်</span></div>
@@ -356,12 +354,6 @@
 <!-- ledger -->
 <div class="screen" id="scr-ledger">
   <div class="acal-row"><button class="acal-btn" onclick="openAdminCal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h2M14 14h2M8 18h2M14 18h2"/></svg><span id="adminDateTextLedger"></span></button></div>
-  <div class="stats">
-    <div class="stat"><b id="ledTot2d">28,000</b><span>2D စုစုပေါင်း</span></div>
-    <div class="stat"><b id="ledTot3d">7,000</b><span>3D စုစုပေါင်း</span></div>
-    <div class="stat"><b id="ledTotFb">17,000</b><span>1D စုစုပေါင်း</span></div>
-    <div class="stat"><b id="ledTotAll">52,000</b><span>စုစုပေါင်း (ကျပ်)</span></div>
-  </div>
   <div class="card" style="padding:0;overflow:hidden"><div class="tabs" style="margin:0">
     <button class="on" data-led="2d" onclick="setLedTab('2d')">2D လယ်ဂျာ</button>
     <button data-led="3d" onclick="setLedTab('3d')">3D လယ်ဂျာ</button>
@@ -511,6 +503,6 @@
 <!-- record date picker calendar popup (Admin v2.3) -->
 <div id="adminCalOverlay" onclick="if(event.target===this)closeAdminCal()"><div class="acal-card" id="adminCalCard"></div></div>
 
-<script type="module" src="admin.js?v=2.21"></script>
+<script type="module" src="admin.js?v=2.22"></script>
 </body>
 </html>
