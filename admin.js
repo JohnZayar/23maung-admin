@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.16';
+import * as L from './logic.js?v=2.17';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -36,9 +36,12 @@ var LED2D_AM = { '09': 5000, '12': 1500, '45': 5000 };
 var LED2D_PM = { '21': 1500, '78': 5000, '90': 5000, '99': 5000 };
 var LED3D = { '357': 5000, '123': 1000, '321': 1000 };
 var LEDFB = [
-  { user: 'User002', what: 'မောင်း 3 ပွဲ — မန်စီးတီး · လာဇီယို · ရိုးမား', amt: 5000 },
-  { user: 'User003', what: 'ဘော်ဒီ — ရိုးမား 1-5', amt: 10000 },
-  { user: 'User001', what: 'ဂိုးပေါ် — မန်စီးတီး vs ဖူလ်ဟမ် 3+25', amt: 2000 }
+  // Admin v2.17: each mockup entry carries its bet type so the ledger FB
+  // table split works pre-login too — parlays stay flat rows, body/goal
+  // singles live in the per-match table (BODY_NET mockup above).
+  { user: 'User002', what: 'မောင်း 3 ပွဲ — မန်စီးတီး · လာဇီယို · ရိုးမား', amt: 5000, bet: { type: 'parlay', status: 'open', legs: [] } },
+  { user: 'User003', what: 'ဘော်ဒီ — ရိုးမား 1-5', amt: 10000, bet: { type: 'body', status: 'open', legs: [] } },
+  { user: 'User001', what: 'ဂိုးပေါ် — မန်စီးတီး vs ဖူလ်ဟမ် 3+25', amt: 2000, bet: { type: 'body', status: 'open', legs: [] } }
 ];
 var BS = {
   '2d': [ { n: '12', v: 7500 }, { n: '65', v: 6500 }, { n: '45', v: 2500 } ],
@@ -663,9 +666,18 @@ function renderBets() {
     const b2 = state.bets2d.filter(function (b) { return b.player === p.id && L.betMatchesDate(b, state.sessions, '2d', d); });
     const b3 = state.bets3d.filter(function (b) { return b.player === p.id && L.betMatchesDate(b, state.sessions, '3d', d); });
     const bf = state.betsFb.filter(function (b) { return b.player === p.id && L.betMatchesDate(b, state.sessions, 'fb', d); });
-    const total = b2.reduce(function (a, b) { return a + (b.total || 0); }, 0) +
-      b3.reduce(function (a, b) { return a + (b.total || 0); }, 0) +
-      bf.reduce(function (a, b) { return a + (b.stake || 0); }, 0);
+    // Admin v2.17 (Pho Nov 21): the header shows the NET (bookie-side,
+    // stake - payouts), like the Summary's per-user net — NOT the stakes
+    // total. Settled bets only (option A); unsettled bets count for
+    // nothing. Signed like the Summary ('+' profit, '-' loss, red when
+    // negative); '—' when nothing is settled yet.
+    const n2 = L.periodNet2D3D(b2, state.sessions, state.settings || {}, '2d');
+    const n3 = L.periodNet2D3D(b3, state.sessions, state.settings || {}, '3d');
+    const nf = L.periodNetFb(bf);
+    const netSettled = n2.settled + n3.settled + nf.settled;
+    const netTotal = n2.net + n3.net + nf.net;
+    const netTxt = netSettled > 0 ? ((netTotal >= 0 ? '+' : '') + fmt(netTotal) + ' ကျပ်') : '—';
+    const netCls = (netSettled > 0 && netTotal < 0) ? ' neg' : '';
     // Admin v2.5: this user's 2D bets split by session period (unresolvable
     // period counts in AM — L.split2DByPeriod, shown never hidden). Only
     // the switched-on section(s) render; the card shows only when the
@@ -675,7 +687,7 @@ function renderBets() {
     const b2am = per === 'pm' ? [] : s2.am;
     const b2pm = per === 'am' ? [] : s2.pm;
     if (!b2am.length && !b2pm.length && !b3.length && !bf.length) return '';
-    function betRows(list, label, withSub) {
+    function betRows(list, label, withSub, game) {
       if (!list.length) return '';
       var out = '<div class="glabel">' + label + '</div>' + list.map(function (b) {
         const what = b.lines
@@ -694,16 +706,20 @@ function renderBets() {
         return row;
       }).join('');
       if (withSub) {
-        var st = list.reduce(function (a, b) { return a + (b.lines ? (b.total || 0) : (b.stake || 0)); }, 0);
-        out += '<div class="bet-row"><span class="what"><b>စုစုပေါင်း</b></span><span class="amt"><b>' + fmt(st) + ' ကျပ်</b></span></div>';
+        // Admin v2.17: section subtotals are NETs too (same rule as the
+        // header) so the sections add up to the header.
+        var r = game === 'fb' ? L.periodNetFb(list) : L.periodNet2D3D(list, state.sessions, state.settings || {}, game);
+        var subTxt = r.settled > 0 ? ((r.net >= 0 ? '+' : '') + fmt(r.net) + ' ကျပ်') : '—';
+        var subCls = (r.settled > 0 && r.net < 0) ? ' neg' : '';
+        out += '<div class="bet-row"><span class="what"><b>စုစုပေါင်း</b></span><span class="amt' + subCls + '"><b>' + subTxt + '</b></span></div>';
       }
       return out;
     }
     const cid = 'uc-' + esc(p.id);
     return '<div class="user-card" id="' + cid + '">' +
-      '<div class="user-head" onclick="toggleUser(\'' + cid + '\')"><span>' + esc(p.name || p.email) + ' <span class="arr">›</span></span><span class="tot">' + fmt(total) + ' ကျပ်</span></div>' +
+      '<div class="user-head" onclick="toggleUser(\'' + cid + '\')"><span>' + esc(p.name || p.email) + ' <span class="arr">›</span></span><span class="tot' + netCls + '">' + netTxt + '</span></div>' +
       '<div class="user-body">' +
-      betRows(b2am, '2D မနက်ပိုင်း', true) + betRows(b2pm, '2D ညနေပိုင်း', true) + betRows(b3, '3D') + betRows(bf, '1D (ဘောပွဲ)') +
+      betRows(b2am, '2D မနက်ပိုင်း', true, '2d') + betRows(b2pm, '2D ညနေပိုင်း', true, '2d') + betRows(b3, '3D', true, '3d') + betRows(bf, '1D (ဘောပွဲ)', true, 'fb') +
       '</div></div>';
   }).join('');
   wrap.innerHTML = rows || '<div class="muted">လောင်းကစား မရှိသေးဘူး</div>';
@@ -921,9 +937,35 @@ function renderLedgerFb() {
   if (!w) return;
   var lim = limitOf('fb');
   var out = '';
+  // Admin v2.17 (Pho Nov 21, paper spec 'ဇယားပုံစံအကြမ်း'): body singles
+  // are a per-match RULED TABLE, not flat per-bet rows — the ledger must
+  // show the whole match situation at a glance (time, teams+line, money
+  // on each side, goal over/under). Per match 2 rows: time | home+line |
+  // away | goal-over line+money, then home money | away money |
+  // goal-under line+money. Kickoff order comes from BODY_NET
+  // (computeBodyNet sorts earliest-first). The limit red does NOT apply
+  // to the table — the limit is per single bet, and the table shows
+  // per-side TOTALS — it stays on the parlay rows below, which are
+  // still one row per bet.
+  var body = BODY_NET || [];
+  if (body.length) {
+    out += '<table class="led-fb-table"><tbody>';
+    body.forEach(function (m) {
+      var r = L.ledgerFbTableRow(m);
+      var homeCell = '<b>' + esc(r.homeTeam) + '</b>' + (r.homeLine ? '<br><span class="ln">' + esc(r.homeLine) + '</span>' : '');
+      var goalOverCell = (r.goalLine ? '<span class="ln">⬆️ ' + esc(r.goalLine) + '</span><br>' : '') + '<b class="amt' + (r.over ? '' : ' zero') + '">' + fmt(r.over) + '</b>';
+      var goalUnderCell = (r.goalLine ? '<span class="ln">⬇️ ' + esc(r.goalLine) + '</span><br>' : '') + '<b class="amt' + (r.under ? '' : ' zero') + '">' + fmt(r.under) + '</b>';
+      out += '<tr class="mrow1"><td class="tm">' + esc(r.time) + '</td><td>' + homeCell + '</td><td><b>' + esc(r.awayTeam) + '</b></td><td>' + goalOverCell + '</td></tr>';
+      out += '<tr class="mrow2"><td></td><td><b class="amt' + (r.h ? '' : ' zero') + '">' + fmt(r.h) + '</b></td><td><b class="amt' + (r.a ? '' : ' zero') + '">' + fmt(r.a) + '</b></td><td>' + goalUnderCell + '</td></tr>';
+    });
+    out += '</tbody></table>';
+  }
+  // Parlays: UNCHANGED (Pho Nov 21 'မောင်းတွေတော့ထားပါတော့') — flat
+  // per-bet rows, limit red intact, same order as before.
   LEDFB.forEach(function (b) {
+    if (!b.bet || b.bet.type !== 'parlay') return;
     const head = '<div class="bet-row' + (b.amt > lim ? ' over' : '') + '"><span><span class="who">' + esc(b.user) + '</span><br><span class="what">' + esc(b.what) + '</span></span><span class="amt">' + fmt(b.amt) + ' ကျပ်</span></div>';
-    const det = b.bet ? fbDetailHtml(b.bet) : '';
+    const det = fbDetailHtml(b.bet);
     out += det ? '<div class="fb-bet">' + head + det + '</div>' : head;
   });
   w.innerHTML = out || '<div class="muted">ဘောပွဲ လောင်းကစား မရှိသေးဘူး</div>';

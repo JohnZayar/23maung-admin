@@ -383,6 +383,29 @@ export function periodNet2D3D(bets, sessions, settings, game) {
   });
   return { net: net, settled: settled };
 }
+// fbBetNet (v2.17, Pho Nov 21 — Bets header net): one football bet's
+// bookie-side net (stake - payout) from its STORED status/payout, or null
+// when the bet is not decided yet (status 'open' or missing). Option A like
+// the Summary: unsettled bets are excluded entirely. NOTE the Summary
+// live-prices FB via footballDailyDetail; the Bets card uses the stored
+// state so the header matches the rows on the same card (a bet whose row
+// still says စောင့်နေတယ် never counts toward the header).
+export function fbBetNet(bet) {
+  if (!bet) return null;
+  if (bet.status !== 'won' && bet.status !== 'lost' && bet.status !== 'settled') return null;
+  return (bet.stake || 0) - (bet.payout || 0);
+}
+// periodNetFb (v2.17): net + settled count over football bets — same shape
+// as periodNet2D3D, so the Bets header can sum all three games alike.
+export function periodNetFb(bets) {
+  let net = 0, settled = 0;
+  (bets || []).forEach(function (b) {
+    const n = fbBetNet(b);
+    if (n === null) return;
+    net += n; settled++;
+  });
+  return { net: net, settled: settled };
+}
 // periodNetByUser (v2.14, Pho Nov 20): per-player net {playerId: net} for
 // 2D/3D bets in a period — settled sessions only (option A). Players with
 // no settled bet in the period do not appear.
@@ -652,6 +675,26 @@ export function ledgerHeaderText(m) {
   const b = m.bodyOdds || '';
   const g = m.goalOdds || '';
   return (b ? b + ' ' : '') + hs + ' & ' + as + (g ? ' / {' + g + '}' : '');
+}
+// ledgerFbTableRow (v2.17, Pho Nov 21 — paper spec 'ဇယားပုံစံအကြမ်း'): one
+// per-match row's display cells for the လယ်ဂျာ football body table. The
+// table shows 2 rows per match: time | home+line | away | goal-over
+// line+money, then home money | away money | goal-under line+money. Money
+// is the TOTAL stake on that side (computeBodyNet aggregates all singles).
+// Unknown kickoff -> '' time; no line -> '' (amounts still show).
+export function ledgerFbTableRow(m) {
+  const ko = m ? formatKickoffYangon(m.kickoff_utc) : null;
+  return {
+    time: ko || '',
+    homeTeam: teamShort((m && m.home) || ''),
+    homeLine: (m && m.bodyOdds) || '',
+    awayTeam: teamShort((m && m.away) || ''),
+    goalLine: (m && m.goalOdds) || '',
+    h: (m && m.h) || 0,
+    a: (m && m.a) || 0,
+    over: (m && m.over) || 0,
+    under: (m && m.under) || 0
+  };
 }
 // One entry line for the စာရင်းချုပ် lists (Pho's EXACT format):
 // body '(odds)Team amount', goal '(odds)Team(⬆️/⬇️)amount'.

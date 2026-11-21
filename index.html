@@ -71,6 +71,7 @@
   .user-card { border: 1px solid #dbe4ef; border-radius: 12px; margin-bottom: 10px; overflow: hidden; box-shadow: 0 1px 5px rgba(30,58,95,.05); }
   .user-head { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; background: #f8fafc; cursor: pointer; font-weight: bold; font-size: 14px; }
   .user-head .tot { color: #1e3a5f; }
+  .user-head .tot.neg { color: #d92b2b; }
   .user-body { display: none; padding: 6px 12px 10px; border-top: 1px solid #e2e8f0; }
   .user-card.open .user-body { display: block; }
   .user-card.open .user-head .arr { transform: rotate(90deg); display: inline-block; }
@@ -90,6 +91,13 @@
   /* v2.10 (Pho Nov 19): the winning number's cell/row is green. */
   .led-cell.win { background: #dcfce7; }
   .led-cell.win b { color: #166534; }
+  .led-fb-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; margin-bottom: 8px; }
+  .led-fb-table td { border: 1px solid #cbd5e1; padding: 6px 7px; vertical-align: middle; color: #1e3a5f; overflow-wrap: break-word; }
+  .led-fb-table td.tm { width: 46px; text-align: center; color: #1e3a5f; font-weight: bold; white-space: nowrap; }
+  .led-fb-table .ln { color: #475569; font-size: 12px; }
+  .led-fb-table tr.mrow1 td { background: #f8fafc; }
+  .led-fb-table tr.mrow2 td { border-bottom: 2px solid #1e3a5f; }
+  .led-fb-table td .amt { font-size: 14px; }
   .bet-row.over .amt, .bet-row.over .what { color: #b91c1c; font-weight: bold; }
   .bet-row.win { background: #dcfce7; }
   .bet-row.win .what, .bet-row.win .amt { color: #166534; }
@@ -204,7 +212,7 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.16</span></div>
+<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.17</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
@@ -500,6 +508,6 @@
 <!-- record date picker calendar popup (Admin v2.3) -->
 <div id="adminCalOverlay" onclick="if(event.target===this)closeAdminCal()"><div class="acal-card" id="adminCalCard"></div></div>
 
-<script type="module" src="admin.js?v=2.16"></script>
+<script type="module" src="admin.js?v=2.17"></script>
 </body>
 </html>
