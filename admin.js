@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.19';
+import * as L from './logic.js?v=2.20';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -965,11 +965,20 @@ function renderLedgerFb() {
     out += '<table class="led-fb-table"><tbody>';
     body.forEach(function (m) {
       var r = L.ledgerFbTableRow(m);
+      // Admin v2.20 (Pho Nov 21 14:38, CORRECTED 14:48): the ledger table
+      // deducts the hedge — the net side shows ONLY the remaining amount,
+      // e.g. under 2,000 with a 500 goal hedge shows just 1,500 (Pho:
+      // 'ကျန်တာဘာမှမပြဘူး'). No gross, no parentheses in the ledger cells.
+      // The ကြီးငယ် card keeps its gross (remaining) display.
+      var hedges = state.hedgeByMatch[m.key] || {};
+      var bn = L.bodyNetOf(m), gn = L.goalNetOf(m);
+      var bHedge = hedges.body ? hedges.body.amount : 0;
+      var gHedge = hedges.goal ? hedges.goal.amount : 0;
       var homeCell = '<b>' + esc(r.homeTeam) + '</b>' + (r.homeLine ? '<br><span class="ln">' + esc(r.homeLine) + '</span>' : '');
-      var goalOverCell = (r.goalLine ? '<span class="ln">⬆️ ' + esc(r.goalLine) + '</span><br>' : '') + '<b class="amt' + (r.over ? '' : ' zero') + '">' + fmt(r.over) + '</b>';
-      var goalUnderCell = (r.goalLine ? '<span class="ln">⬇️ ' + esc(r.goalLine) + '</span><br>' : '') + '<b class="amt' + (r.under ? '' : ' zero') + '">' + fmt(r.under) + '</b>';
+      var goalOverCell = (r.goalLine ? '<span class="ln">⬆️ ' + esc(r.goalLine) + '</span><br>' : '') + '<b class="amt' + (r.over ? '' : ' zero') + '">' + (gn.side === 'over' ? fmt(L.remainingAfterHedge(r.over, gHedge)) : fmt(r.over)) + '</b>';
+      var goalUnderCell = (r.goalLine ? '<span class="ln">⬇️ ' + esc(r.goalLine) + '</span><br>' : '') + '<b class="amt' + (r.under ? '' : ' zero') + '">' + (gn.side === 'under' ? fmt(L.remainingAfterHedge(r.under, gHedge)) : fmt(r.under)) + '</b>';
       out += '<tr class="mrow1"><td class="tm">' + esc(r.time) + '</td><td>' + homeCell + '</td><td><b>' + esc(r.awayTeam) + '</b></td><td>' + goalOverCell + '</td></tr>';
-      out += '<tr class="mrow2"><td></td><td><b class="amt' + (r.h ? '' : ' zero') + '">' + fmt(r.h) + '</b></td><td><b class="amt' + (r.a ? '' : ' zero') + '">' + fmt(r.a) + '</b></td><td>' + goalUnderCell + '</td></tr>';
+      out += '<tr class="mrow2"><td></td><td><b class="amt' + (r.h ? '' : ' zero') + '">' + (bn.side === 'h' ? fmt(L.remainingAfterHedge(r.h, bHedge)) : fmt(r.h)) + '</b></td><td><b class="amt' + (r.a ? '' : ' zero') + '">' + (bn.side === 'a' ? fmt(L.remainingAfterHedge(r.a, bHedge)) : fmt(r.a)) + '</b></td><td>' + goalUnderCell + '</td></tr>';
     });
     out += '</tbody></table>';
   }
