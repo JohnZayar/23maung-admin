@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.22';
+import * as L from './logic.js?v=2.23';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -1667,7 +1667,7 @@ async function saveSettings() {
   if (!state.loaded) { toast('သတ်မှတ်ချက် သိမ်းပြီ'); return; }
   const body = {
     rate_2d: parseInt($('rate2d').value, 10) || 9000,
-    rate_3d: parseInt($('rate3d').value, 10) || 65000,
+    rate_3d: parseInt($('rate3d').value, 10) || 60000,
     max_legs: parseInt($('maxLegs').value, 10) || 10,
     min_fb: parseInt($('minFb').value, 10) || 500,
     min_2d3d: parseInt($('min23').value, 10) || 100,
