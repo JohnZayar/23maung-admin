@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.20';
+import * as L from './logic.js?v=2.21';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -1033,21 +1033,13 @@ function renderBsBody() {
   // openHedgeSheet indexes into, so sort it in place, not a copy.
   BODY_NET = L.sortBodyNetByKickoff(BODY_NET);
   var out = '';
-  out += '<div class="ld-legend">⬆️ = ဂိုးပေါ် · ⬇️ = ဂိုးအောက် · {} = အကျန်</div>';
+  out += '<div class="ld-legend">⬆️ = ဂိုးပေါ် · ⬇️ = ဂိုးအောက်</div>'; // v2.21: the '{} = အကျန်' remainder notation is gone with the ld-net line
   out += '<div class="muted" style="margin:4px 0 8px">အကန် ထည့်ရန် / ပြင်ရန် ပွဲကို ဖိပါ · အချိန်အစဉ်လိုက်</div>';
-  var lim = limitOf('fb'); // per-bet limit for the over-limit excess (v2.19)
   BODY_NET.forEach(function (m, idx) {
     var hedges = state.hedgeByMatch[m.key] || {};
     var bn = L.bodyNetOf(m), gn = L.goalNetOf(m);
     var bHedge = hedges.body ? hedges.body.amount : 0;
     var gHedge = hedges.goal ? hedges.goal.amount : 0;
-    var bRem = L.remainingAfterHedge(bn.net, bHedge);
-    var gRem = L.remainingAfterHedge(gn.net, gHedge);
-    var bExcess = lim > 0 ? L.excessOverLimit(bRem, lim) : 0;
-    var gExcess = lim > 0 ? L.excessOverLimit(gRem, lim) : 0;
-    var bSide = bn.side === 'h' ? L.teamShort(m.home_mm || m.home) : bn.side === 'a' ? L.teamShort(m.away_mm || m.away) : '';
-    var bTxt = bRem === 0 ? 'မျှ' : bSide + ' ' + fmt(bRem);
-    var gTxt = gRem === 0 ? 'မျှ' : '{' + (gn.side === 'over' ? '⬆️' : '⬇️') + fmt(gRem) + '}';
     var hl = [];
     if (hedges.body) hl.push(L.hedgeLineText(hedges.body));
     if (hedges.goal) hl.push(L.hedgeLineText(hedges.goal));
@@ -1066,10 +1058,6 @@ function renderBsBody() {
     var underCell = '<span class="' + (m.under ? '' : 'zero') + '">⬇️' + (gn.side === 'under' ? grossRemText(m.under, gHedge) : fmt(m.under || 0)) + '</span>';
     out += '<div class="ld-amt">' + hCell + aCell + overCell + '</div>';
     out += '<div class="ld-under">' + underCell + '</div>';
-    var excTxt = '';
-    if (bExcess > 0) excTxt += ' <span style="color:#d92b2b">အကျွံ ' + fmt(bExcess) + '</span>';
-    if (gExcess > 0) excTxt += ' <span style="color:#d92b2b">ဂိုးအကျွံ ' + fmt(gExcess) + '</span>';
-    out += '<div class="ld-net"><span>အကျန်</span><span>' + esc(bTxt) + ' ' + esc(gTxt) + excTxt + '</span></div>';
     if (hl.length) out += '<div class="m-hedged">' + esc(hl.join(' · ')) + '</div>';
     out += '</div>';
   });
