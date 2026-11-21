@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.21';
+import * as L from './logic.js?v=2.22';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -671,9 +671,11 @@ async function createPlayer() {
 function renderBets() {
   if (!state.loaded) return; // keep the mockup's three sample user cards
   const d = ensureAdminDate();
-  // Admin v2.5: the 2D period switch — one shared state across all three
-  // 2D views, so the detail here follows the same period as လယ်ဂျာ + ကြီးငယ်.
-  const per = resolveAdminPeriod();
+  // Admin v2.22 (Pho Nov 21): the မနက်/ညနေ/နှစ်ခုလုံး pills are REMOVED
+  // from this screen, so the list always shows BOTH periods (the old
+  // 'both' behavior) — no filter, whatever the shared switch says on the
+  // other screens. The switch itself still lives for လယ်ဂျာ + ကြီးငယ်.
+  const per = 'both';
   const wrap = $('betsList');
   const rows = state.players.map(function (p) {
     const b2 = state.bets2d.filter(function (b) { return b.player === p.id && L.betMatchesDate(b, state.sessions, '2d', d); });
