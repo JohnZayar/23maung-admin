@@ -1159,16 +1159,19 @@ export function parlayPayout(stake, legs, settings) {
 }
 
 // ---- Football leg settlement ------------------------------------------------
-// pyar is stored as HUNDREDTHS of the line fraction (line -1.25 -> pyar 25,
-// line 1.45 -> pyar 45, line -1.5 -> pyar 50). The displayed Myanmar string
-// shows the same digits (".5" renders as "5"); the math needs hundredths.
+// pyar is the fraction digits AS WRITTEN (Pho Nov 22 — "အတိုမဟုတ်ဘူး"):
+// 2+5 = 5 pyar, 2+10 = 10, 2+15 = 15, 2+25 = 25, 2+75 = 75, 3-45 = 45.
+// That is hundredths EXCEPT a .5 fraction is 5, not 50 ("5" is not
+// shorthand for "50" — they differ by 45). So pyarFromLine returns the
+// hundredths value, with 50 mapped to 5.
 // CORRECTED (Pho Nov 17): the pyar is the BOUNDARY (ပြားစွန်းး) amount
 // ONLY — at the exact boundary the line's side wins/loses stake*pyar/100.
 // A full win pays the FULL stake as profit (5% off), NOT the pyar rate:
 // the old reading "1+45 -> 1000 wins 450" applied the pyar to EVERY win
 // and was wrong.
 export function pyarFromLine(line) {
-  return Math.round((Math.abs(line) % 1) * 100);
+  const p = Math.round((Math.abs(line) % 1) * 100);
+  return p === 50 ? 5 : p;
 }
 
 // Evaluate one Asian-handicap leg (BODY only).
@@ -1183,7 +1186,10 @@ export function pyarFromLine(line) {
 // FULL loss — no pyar, whatever the fraction is (.25/.5/.75 alike). The
 // fraction sets only the pyar AMOUNT. Which side wins the pyar is decided
 // by the LINE SIGN: line < 0 -> the pick wins it (halfWin), line > 0 ->
-// the pick loses it (halfLoss).
+// the pick loses it (halfLoss) — EXCEPT at main 0 (CORRECTED Pho Nov 22):
+// at a draw the pyar goes to the RECEIVING side, the giving side loses it
+// (Villa =75 draws 0:0 -> Villa loses 75, Sunderland wins 75). At main >= 1
+// the Nov 17 rule stands.
 // (This replaces the old quarter-split: a 1.75 line winning by 2 is a FULL
 // win, not a pyar loss; a 1.5 line winning by 1 is a pyar win, not a loss.)
 // NOTE: evalLine is for BODY legs only. Goal-total legs use evalGoalLine
@@ -1199,7 +1205,9 @@ export function evalLine(line, margin) {
   if (frac > 0) {
     const pyarMargin = line < 0 ? main : -main;
     if (margin === pyarMargin) {
-      return { res: line < 0 ? 'halfWin' : 'halfLoss', pyar: pyar };
+      // 0-main (Pho Nov 22): the pyar goes to the RECEIVING side.
+      const win = main === 0 ? line > 0 : line < 0;
+      return { res: win ? 'halfWin' : 'halfLoss', pyar: pyar };
     }
   }
   return { res: adj > 0 ? 'win' : adj < 0 ? 'loss' : 'push', pyar: pyar };
@@ -1214,9 +1222,12 @@ export function evalGoalLine(glLine, total, pick) {
   const g = Math.abs(glLine);
   const frac = g % 1;
   const main = Math.trunc(g);
-  const pyar = Math.round(frac * 100);
+  const pyar = pyarFromLine(glLine);
   if (frac > 0 && total === main) {
-    const overWinsPyar = glLine > 0;
+    // 0-main (Pho Nov 22, same rule as evalLine by analogy — Pho verified
+    // the body case only): at total 0 the over needs goals and got none,
+    // so the over loses the pyar and the under wins it.
+    const overWinsPyar = main === 0 ? glLine < 0 : glLine > 0;
     const won = pick === 'over' ? overWinsPyar : !overWinsPyar;
     return { res: won ? 'halfWin' : 'halfLoss', pyar: pyar };
   }
