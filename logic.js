@@ -8,6 +8,8 @@
 //   - the admin mockup v2.4's own functions (netSide, big/small "N = V").
 // Where the schema leaves a rule open it is marked OPEN below and the
 // chosen behaviour is the one the task assigned (see WIRING.md).
+// Parlay payout: bet365 method since Nov 22 (Pho ordered) — gross x 0.84;
+// the Nov-17 fixed table is removed (see the Parlay section).
 
 export function reverse2(n) { return String(n).split('').reverse().join(''); }
 
@@ -942,7 +944,7 @@ export const FOOTBALL_REBATE = 0.015;
 export function footballDailyResult(bet, fixturesById, settings) {
   const r = settleFbBet(bet, fixturesById, settings);
   if (!r) return null;
-  return r.profit; // settled profit as-is: body win 9500 / loss -10000, parlay tier-commissioned
+  return r.profit; // settled profit as-is: body win 9500 / loss -10000, parlay bet365-commissioned
 }
 // Sum of the Daily results over settled football bets.
 export function footballDailyTotal(fbBets, fixturesById, settings) {
@@ -1090,10 +1092,11 @@ export function cellClass(v, lim, blocked) {
 }
 
 // ---- Parlay -----------------------------------------------------------------
-// NOTE (Pho Nov 17): parlay commission (comm_23/47/810 in m23_settings) no
-// longer affects parlays — parlays now pay from the balanced table below.
-// parlayCommission is kept (exported) only because Admin Settings still
-// reads/writes those fields; it is no longer called by parlayPayout.
+// NOTE (Pho Nov 17, superseded Nov 22): parlay commission (comm_23/47/810 in
+// m23_settings) no longer affects parlays — parlays now pay by the bet365
+// method below (Pho Nov 22: gross x (1 - 0.16)). parlayCommission is kept
+// (exported) only because Admin Settings still reads/writes those fields;
+// it is no longer called by parlayPayout.
 export function parlayCommission(nLegs, settings) {
   const s = settings || {};
   if (nLegs <= 3) return (s.comm_23 !== undefined ? s.comm_23 : 15);
@@ -1112,50 +1115,27 @@ export function legFactor(res, pyar) {
   return 0; // 'loss' (or unset) — parlayPayout short-circuits on loss anyway
 }
 
-// Balanced parlay table (Pho Nov 17, APPROVED): pay a LITTLE MORE than the
-// outside paper bookie's printed sheet, balanced across every draw cell.
-// The old formula (legs x2, then 15/20/30% commission) paid far above the
-// sheet at high legs (8 legs: 179.2x vs sheet 100x) — no commission tier
-// could fix that (matching the sheet by formula would need ~57% at 7-8
-// legs). The table IS the net return multiplier (stake included).
-// All-win multipliers by legs (sheet 4-8 legs: 13/21/32/50/100, +~10%):
-const PARLAY_ALLWIN = { 2: 3.5, 3: 7, 4: 14, 5: 23, 6: 35, 7: 55, 8: 110, 9: 200, 10: 350 };
-// Draw rows, legs 4-8, draws 1-4 (sheet values x1.1, cleaned to .5 steps):
-//   1 draw:  5/10/16/30/40  -> 5.5/11/18/33/44
-//   2 draws: 2/4/6/12/22    -> 2.5/4.5/7/13.5/24.5
-//   3 draws: -/3/4/7/12     -> 2/3.5/4.5/8/13.5 (4 legs: no sheet value, 2x)
-//   4 draws: -/1/2/7/8      -> 1/1.1/2.5/8/9 (4 legs all-push: stake back)
-const PARLAY_DRAWS = {
-  4: { 1: 5.5, 2: 2.5, 3: 2, 4: 1 },
-  5: { 1: 11, 2: 4.5, 3: 3.5, 4: 1.1 },
-  6: { 1: 18, 2: 7, 3: 4.5, 4: 2.5 },
-  7: { 1: 33, 2: 13.5, 3: 8, 4: 8 },
-  8: { 1: 44, 2: 24.5, 3: 13.5, 4: 9 }
-};
-
-// Table multiplier for n legs with d pushes. Outside the printed rows
-// (2-3 / 9-10 legs, or 5+ draws) the all-win value halves per draw,
-// floored at 1x (stake back).
-export function parlayTableMult(nLegs, nDraws) {
-  const row = PARLAY_DRAWS[nLegs];
-  if (row && row[nDraws] !== undefined) return row[nDraws];
-  const base = PARLAY_ALLWIN[nLegs];
-  if (base === undefined) return 1;
-  return Math.max(1, base / Math.pow(2, nDraws));
-}
+// bet365 parlay method (Pho Nov 22, ORDERED — replaces the Nov-17 table):
+// gross = stake x Π(leg factors); net (TOTAL return, stake included) =
+// gross x (1 - 0.16). The 16% is a FIXED commission on the gross (from
+// Pho's 365maung sheet image) — NOT a Settings knob. Leg factors (unchanged):
+// full win x2; pyar win x(1+pyar/100); pyar loss x(1-pyar/100); push x1;
+// any full loss = 0. The Nov-17 table (PARLAY_ALLWIN / PARLAY_DRAWS /
+// parlayTableMult) is REMOVED — no longer used anywhere. NO.6 under this
+// method: 2500 x 2 x 2 x 2 x 1.05 x 1.75 = 36750 gross -> 30870 net.
+// (Under the old table NO.6 paid 26414; that bet stays paid — do NOT re-settle.)
+export const PARLAY_COMM_BET365 = 0.16;
 
 export function parlayPayout(stake, legs, settings) {
   const ls = legs || [];
   if (!ls.length) return 0;
-  let draws = 0;
-  let scale = 1;
+  let gross = stake;
   for (let i = 0; i < ls.length; i++) {
     const l = ls[i];
     if (l.res === 'loss') return 0;
-    if (l.res === 'push') { draws++; continue; }
-    scale *= legFactor(l.res, l.pyar) / 2;
+    gross *= legFactor(l.res, l.pyar);
   }
-  return Math.round(stake * parlayTableMult(ls.length, draws) * scale);
+  return Math.round(gross * (1 - PARLAY_COMM_BET365));
 }
 
 // ---- Football leg settlement ------------------------------------------------
