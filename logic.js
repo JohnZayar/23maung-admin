@@ -1358,6 +1358,50 @@ export async function rejectRequest(pb, req) {
   return pb.update('m23_requests', req.id, { status: 'rejected', decided_at: now });
 }
 
+// ---- Player management (Admin v2.27, Pho Nov 23) ---------------------------
+// Admin user management: password reset, disable/enable, balance adjust.
+// m23_players.status is a select [active|disabled]; the Player login
+// (wiring.js) refuses status === 'disabled', so disabling = soft-close:
+// the player can no longer log in, but bets/history stay untouched —
+// nothing is ever hard-deleted. Balance adjust reuses the existing
+// wallet_tx kinds (topup/withdraw); kind is a select with NO 'adjust'
+// value, so no schema change is needed. A correction is a signed
+// topup/withdraw with note 'Admin ပြင်: <reason>' and balance_after, so
+// the audit trail stays complete (balance = sum of wallet_tx). A
+// correction NEVER drives the balance negative (blocked — same rule as
+// the top-up reversal); if money is tied in open bets, Pho corrects the
+// bets first, then the balance.
+export async function resetPlayerPassword(pb, playerId, newPass) {
+  if (!playerId) throw new Error('အကောင့် မရှိဘူး');
+  if (!newPass || newPass.length < 8) throw new Error('Password အနည်းဆုံး ၈ လုံး ဖြစ်ရမယ်');
+  return pb.update('m23_players', playerId, { password: newPass, passwordConfirm: newPass });
+}
+export async function setPlayerStatus(pb, playerId, status) {
+  if (!playerId) throw new Error('အကောင့် မရှိဘူး');
+  if (status !== 'active' && status !== 'disabled') throw new Error('status မှားနေတယ်');
+  return pb.update('m23_players', playerId, { status: status });
+}
+export async function adjustPlayerBalance(pb, playerId, delta, reason) {
+  if (!playerId) throw new Error('အကောင့် မရှိဘူး');
+  delta = Math.round(Number(delta) || 0);
+  if (!delta) throw new Error('ငွေ ပမာဏ ရိုက်ပါ');
+  if (!reason || !String(reason).trim()) throw new Error('အကြောင်းပြချက် ရိုက်ပါ');
+  const player = await pb.getOne('m23_players', playerId);
+  const newBalance = (player.balance || 0) + delta;
+  if (newBalance < 0) throw new Error('လက်ကျန် အနုတ် ဖြစ်သွားမယ် — ပြင်လို့ မရဘူး');
+  const isAdd = delta > 0;
+  const tx = await pb.create('m23_wallet_tx', {
+    player: playerId,
+    kind: isAdd ? 'topup' : 'withdraw',
+    amount: delta,
+    ref_id: '',
+    note: 'Admin ပြင်: ' + String(reason).trim(),
+    balance_after: newBalance
+  });
+  const updated = await pb.update('m23_players', playerId, { balance: newBalance });
+  return { player: updated, tx: tx, newBalance: newBalance };
+}
+
 // Settle one 2D or 3D session after Admin sets win_number.
 // bets: placed m23_bets_2d (game '2d') or m23_bets_3d (game '3d') rows.
 // Winners: bet -> won + win_amount, wallet_tx kind win_2d/win_3d (+win),
