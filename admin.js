@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.26';
+import * as L from './logic.js?v=2.27';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -15,6 +15,7 @@ const state = {
   sessions: [],        // m23_sessions
   requests: [],        // m23_requests (pending + decided, for counts)
   players: [],         // m23_players
+  selUser: null,       // Users screen (Admin v2.27): selected player id
   bets2d: [], bets3d: [], betsFb: [],
   fixtures: [],        // m23_fixtures
   oddsByFixture: {},  // m23_odds by fixture id (Admin v2.18: goal/body line fallback for the ledger table)
@@ -396,7 +397,7 @@ function renderAll() {
   renderBets();
   renderLedger2D(); renderLedger3D(); renderLedgerFb();
   renderBs(); renderBlocked(); updPend();
-  renderDashboard(); renderSummary(); renderResults(); renderSettings(); renderHomeSessions();
+  renderDashboard(); renderSummary(); renderResults(); renderSettings(); renderHomeSessions(); renderUsers();
   syncLimitInputs();
 }
 
@@ -687,6 +688,114 @@ async function createPlayer() {
     fail(e && e.status === 400 ? 'အဲဒီ အကောင့် ရှိပြီးသား' : 'အကောင့် ဖွင့်လို့ မရဘူး — ' + (e.message || 'error'));
   } finally {
     _creatingPlayer = false;
+  }
+}
+
+// ---------------------------------------------------------------- users tab (Admin v2.27, Pho Nov 23)
+// User management: password reset, disable/enable, balance adjust.
+// Replaces the bottom-nav Ledger tab (Pho: the Home Ledger box already
+// leads to the Ledger, so the nav Ledger was one extra). Ledger is still
+// reachable from the Home box. Nothing here hard-deletes a player:
+// disabling sets status='disabled' (Player login refuses it) and keeps
+// all bets/history; balance adjust writes a signed wallet_tx so the
+// audit trail stays complete.
+function renderUsers() {
+  if (!state.loaded) return; // keep the mockup sample data on screen
+  const wrap = $('usersList');
+  if (!wrap) return;
+  $('usersCount').textContent = state.players.length + ' ယောက်';
+  wrap.innerHTML = state.players.map(function (p) {
+    const dis = p.status === 'disabled';
+    const badge = dis ? '<span class="badge no">ပိတ်ထားတယ်</span>' : '<span class="badge ok">ဖွင့်ထားတယ်</span>';
+    return '<div class="user-card' + (state.selUser === p.id ? ' open' : '') + '" id="uc-' + esc(p.id) + '">' +
+      '<div class="user-head" onclick="selectUser(\'' + esc(p.id) + '\')"><span>' + esc(p.name || p.email || p.id) + ' <span class="arr">›</span></span>' +
+      '<span class="tot' + ((p.balance || 0) < 0 ? ' neg' : '') + '">' + fmt(p.balance || 0) + ' ကျပ်</span></div>' +
+      '<div class="user-body">' + badge + ' <span class="muted">' + esc(p.email || '') + '</span></div>' +
+      '</div>';
+  }).join('') || '<div class="muted">အကောင့် မရှိသေးဘူး</div>';
+  renderUserDetail();
+}
+function renderUserDetail() {
+  const box = $('userDetail');
+  if (!box) return;
+  const p = state.players.find(function (x) { return x.id === state.selUser; });
+  if (!p) { box.innerHTML = '<div class="muted">အကောင့် တခုကို နှိပ်ပါ — ပက်ဝက် ပြန်ပေး / အကောင့် ပိတ် / လက်ကျန် ပြင် လုပ်လို့ရမယ်</div>'; return; }
+  const dis = p.status === 'disabled';
+  box.innerHTML =
+    '<div class="card"><h3>' + esc(p.name || p.email || p.id) + '</h3>' +
+    '<div class="bet-row"><span>လက်ကျန်</span><b>' + fmt(p.balance || 0) + ' ကျပ်</b></div>' +
+    '<div class="bet-row"><span>အခြေအနေ</span><b>' + (dis ? 'ပိတ်ထားတယ်' : 'ဖွင့်ထားတယ်') + '</b></div>' +
+    '<div class="bet-row"><span>Email</span><span class="muted">' + esc(p.email || '') + '</span></div></div>' +
+    '<div class="sect">ပက်ဝက် ပြန်ပေးမယ်</div>' +
+    '<div class="card"><input type="password" id="upNewPass" placeholder="Password အသစ် (အနည်းဆုံး ၈ လုံး)" autocomplete="new-password">' +
+    '<button class="btn-navy" onclick="resetUserPass()">ပက်ဝက် ပြန်ပေးမယ်</button>' +
+    '<div class="muted" id="upPassMsg"></div></div>' +
+    '<div class="sect">အကောင့် ပိတ် / ပြန်ဖွင့်</div>' +
+    '<div class="card"><div class="muted" style="margin-bottom:8px">' + (dis ? 'ပိတ်ထားတဲ့ အကောင့် — ထိုးသား ဝင်လို့ မရဘူး။ ပြန်ဖွင့်ရင် ပြန်ဝင်လို့ရမယ်။ ထိုးခဲ့တဲ့ မှတ်တမ်းတွေ မပျက်ဘူး။' : 'ပိတ်လိုက်ရင် ထိုးသား ဝင်လို့ မရတော့ဘူး။ ထိုးခဲ့တဲ့ မှတ်တမ်းတွေ မပျက်ဘူး။') + '</div>' +
+    (dis
+      ? '<button class="btn-green" onclick="toggleUserStatus()">အကောင့် ပြန်ဖွင့်မယ်</button>'
+      : '<button class="btn-red" onclick="toggleUserStatus()">အကောင့် ပိတ်မယ်</button>') + '</div>' +
+    '<div class="sect">လက်ကျန် ပြင်မယ်</div>' +
+    '<div class="card"><div class="muted" style="margin-bottom:8px">ထည့်ချင် +5000 · လျှော့ချင် -5000 (လက်ကျန် အနုတ် ဖြစ်ရင် ပြင်လို့ မရဘူး)</div>' +
+    '<input type="number" id="upAdjAmt" placeholder="ငွေ ပမာဏ (+ / -)" step="500">' +
+    '<input type="text" id="upAdjReason" placeholder="အကြောင်းပြချက် (ဥပမာ ငွေမှားထည့်မိလို့)">' +
+    '<button class="btn-navy" onclick="adjustUserBalance()">လက်ကျန် ပြင်မယ်</button>' +
+    '<div class="muted" id="upAdjMsg"></div></div>';
+}
+function selectUser(id) {
+  state.selUser = id;
+  renderUsers();
+}
+async function resetUserPass() {
+  const p = state.players.find(function (x) { return x.id === state.selUser; });
+  if (!p) return;
+  const pass = ($('upNewPass').value || '');
+  const msgEl = $('upPassMsg');
+  try {
+    await L.resetPlayerPassword(PB, p.id, pass);
+    $('upNewPass').value = '';
+    if (msgEl) msgEl.textContent = 'Password အသစ် ပေးပြီးပြီ — ' + (p.name || p.id);
+    toast('Password ပြန်ပေးပြီ');
+  } catch (e) {
+    const m = e.message || 'ပြန်ပေးလို့ မရဘူး';
+    if (msgEl) msgEl.textContent = m;
+    toast(m);
+  }
+}
+async function toggleUserStatus() {
+  const p = state.players.find(function (x) { return x.id === state.selUser; });
+  if (!p) return;
+  const dis = p.status === 'disabled';
+  const next = dis ? 'active' : 'disabled';
+  if (!dis && !confirm('အကောင့် ' + (p.name || p.id) + ' ကို ပိတ်မလား? ထိုးသား ဝင်လို့ မရတော့မယ်။')) return;
+  try {
+    const updated = await L.setPlayerStatus(PB, p.id, next);
+    const i = state.players.findIndex(function (x) { return x.id === p.id; });
+    if (i >= 0) state.players[i] = updated;
+    renderUsers(); renderDashboard(); renderSummary();
+    toast(dis ? 'အကောင့် ပြန်ဖွင့်ပြီ' : 'အကောင့် ပိတ်ပြီ');
+  } catch (e) {
+    toast(e.message || 'လုပ်လို့ မရဘူး');
+  }
+}
+async function adjustUserBalance() {
+  const p = state.players.find(function (x) { return x.id === state.selUser; });
+  if (!p) return;
+  const amt = Number(($('upAdjAmt').value || '').trim());
+  const reason = ($('upAdjReason').value || '').trim();
+  const msgEl = $('upAdjMsg');
+  try {
+    const r = await L.adjustPlayerBalance(PB, p.id, amt, reason);
+    const i = state.players.findIndex(function (x) { return x.id === p.id; });
+    if (i >= 0) state.players[i] = r.player;
+    $('upAdjAmt').value = ''; $('upAdjReason').value = '';
+    if (msgEl) msgEl.textContent = 'လက်ကျန် ပြင်ပြီးပြီ — အခု ' + fmt(r.newBalance) + ' ကျပ်';
+    renderUsers(); renderDashboard(); renderSummary();
+    toast('လက်ကျန် ပြင်ပြီ');
+  } catch (e) {
+    const m = e.message || 'ပြင်လို့ မရဘူး';
+    if (msgEl) msgEl.textContent = m;
+    toast(m);
   }
 }
 
@@ -1752,6 +1861,10 @@ window.renderLedgerFb = renderLedgerFb;
 window.approveReq = approveReq;
 window.rejectReq = rejectReq;
 window.createPlayer = createPlayer;
+window.selectUser = selectUser;
+window.resetUserPass = resetUserPass;
+window.toggleUserStatus = toggleUserStatus;
+window.adjustUserBalance = adjustUserBalance;
 window.saveWins = saveWins;
 window.saveSettings = saveSettings;
 window.toggleSession = toggleSession;
@@ -1778,6 +1891,7 @@ window.saveHedgeSheet = saveHedgeSheet;
 // Named exports for Node tests (browser module load ignores them).
 export { timeFromCloseAt, resText, betStatusText, betStatusClass, legLine, legLineHtml, fbDetailHtml, nextAccountNumber };
 export { renderAll, renderBets, renderLedger2D, renderLedger3D, renderLedgerFb, renderBs, bsText, recomputeFromLive, setBsTab, setLedTab, setSumTab, renderSummary };
+export { renderUsers, selectUser, resetUserPass, toggleUserStatus, adjustUserBalance };
 export { renderBsBody, openHedgeSheet, updateHedgeRemain }; // test hooks (v2.19)
 export { ensureAdminDate, setAdminDate, syncAdminDateText, openAdminCal, closeAdminCal, renderAdminCal, adminCalMove, adminCalPick, adminCalQuick };
 export { resolveAdminPeriod, setAdminPeriod, syncAdminPeriod };
