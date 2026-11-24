@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.28';
+import * as L from './logic.js?v=2.29';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -1312,16 +1312,26 @@ function openFbSum() { renderFbSum(); go('scr-fbsum'); }
 function renderFbSum() {
   var w = $('fbsumList');
   if (!w) return;
-  var bettors = L.groupBettorEntries(state.betsFb, playerName, fxById());
+  // v2.29 (Pho Nov 24): per user, per Yangon day, with that day's
+  // အရှုံးအမြတ် under its lines and the grand total at the bottom.
+  var byDay = L.groupBettorEntriesByDay(state.betsFb, playerName, fxById());
   var hedges = L.groupHedgeEntries(state.hedges);
   var out = '';
   out += '<div class="fs-group"><div class="fs-head">ထိုးသားစာရင်း</div>';
-  if (!bettors.length) { out += '<div class="muted">ထိုးသား မရှိသေးပါ</div>'; }
-  bettors.forEach(function (g) {
-    out += '<div class="fs-name">' + esc(g.name) + '</div>';
-    g.lines.forEach(function (ln) { out += '<div class="fs-line">' + esc(ln) + '</div>'; });
+  if (!byDay.groups.length) { out += '<div class="muted">ထိုးသား မရှိသေးပါ</div>'; }
+  byDay.groups.forEach(function (g) {
+    g.days.forEach(function (d) {
+      out += '<div class="fs-name">' + esc(g.name) + ' — ' + esc(d.ymd ? L.fmtDateOnly(d.ymd) : 'ရက်မသိ') + '</div>';
+      d.lines.forEach(function (ln) { out += '<div class="fs-line">' + esc(ln) + '</div>'; });
+      var netTxt = 'အရှုံးအမြတ်: ' + L.signedNetText(d.net);
+      if (d.unsettled > 0) netTxt += ' · မပြီးသေးတာ ' + d.unsettled + ' ကွက်';
+      var netCls = (d.net !== null && d.net < 0) ? 'fs-net neg' : 'fs-net';
+      out += '<div class="' + netCls + '">' + esc(netTxt) + '</div>';
+    });
   });
   out += '</div>';
+  var totCls = (byDay.totalNet !== null && byDay.totalNet < 0) ? 'fs-total neg' : 'fs-total';
+  out += '<div class="' + totCls + '">စုစုပေါင်း အရှုံးအမြတ်: ' + esc(L.signedNetText(byDay.totalNet)) + '</div>';
   out += '<div class="fs-group"><div class="fs-head">အကန်စာရင်း</div>';
   if (!hedges.length) { out += '<div class="muted">အကန် မရှိသေးပါ</div>'; }
   hedges.forEach(function (g) {
@@ -1332,9 +1342,9 @@ function renderFbSum() {
   w.innerHTML = out;
 }
 function copyFbSum() {
-  var bettors = L.groupBettorEntries(state.betsFb, playerName, fxById());
+  var byDay = L.groupBettorEntriesByDay(state.betsFb, playerName, fxById());
   var hedges = L.groupHedgeEntries(state.hedges);
-  var txt = L.fbsumCopyText(bettors, hedges);
+  var txt = L.fbsumCopyText(byDay, hedges);
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(txt).then(function () { toast('ကူးယူပြီးပါပြီ'); }, function () { toast('ကူးလို့ မရပါ'); });
   } else {
