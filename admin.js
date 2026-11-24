@@ -17,6 +17,7 @@ const state = {
   players: [],         // m23_players
   selUser: null,       // Users screen (Admin v2.27): selected player id
   fbsumUser: null,     // fb summary (Admin v2.30): selected player id for the user picker
+  sumFbUser: null,     // summary fb tab (Admin v2.32): selected player id for the user picker
   bets2d: [], bets3d: [], betsFb: [],
   fixtures: [],        // m23_fixtures
   oddsByFixture: {},  // m23_odds by fixture id (Admin v2.18: goal/body line fallback for the ledger table)
@@ -1319,6 +1320,7 @@ function fbsumUsers() {
     .sort(function (a, b) { return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0); });
 }
 function setFbsumUser(pid) { state.fbsumUser = pid; renderFbSum(); }
+function setSumFbUser(pid) { state.sumFbUser = pid; renderSummary(); }
 function openFbSum() {
   const users = fbsumUsers();
   if (!state.fbsumUser || !users.some(function (u) { return u.id === state.fbsumUser; })) {
@@ -1649,11 +1651,37 @@ function renderSummary() {
     const ns = (d.net >= 0 ? '+' : '') + fmt(d.net);
     fbLines.push(gs + ' (' + ns + ')');
   });
+  // v2.32 (Pho Nov 24): the summary fb tab shows the per-user per-day
+  // format — pick one user, see that user's bets for the picked day, one
+  // line per leg + Total. The bare per-leg gross/net list was meaningless
+  // (no team, no user). fbLines/fbTotal/fbNetByUser above still feed the
+  // header net, the per-user list and the net stat.
+  const sumFbSel = $('sumFbUserSel');
+  if (sumFbSel) {
+    const sumUsers = fbsumUsers();
+    if (!state.sumFbUser || !sumUsers.some(function (u) { return u.id === state.sumFbUser; })) {
+      state.sumFbUser = sumUsers.length ? sumUsers[0].id : null;
+    }
+    sumFbSel.innerHTML = sumUsers.map(function (u) { return '<option value="' + esc(u.id) + '"' + (u.id === state.sumFbUser ? ' selected' : '') + '>' + esc(u.name) + '</option>'; }).join('');
+    sumFbSel.value = state.sumFbUser || '';
+  }
   const fbDetailEl = $('sumFbDetail');
   if (fbDetailEl) {
-    fbDetailEl.innerHTML = fbLines.length
-      ? fbLines.map(function (l) { return '<div>' + esc(l) + '</div>'; }).join('') + '<div><b>Total ' + fmt(fbTotal) + '</b></div>'
-      : '<div>ဘောပွဲ မရှိသေးပါ</div>';
+    if (!state.sumFbUser) {
+      fbDetailEl.innerHTML = '<div>ထိုးသား မရှိသေးပါ</div>';
+    } else {
+      const sud = L.userDayFbLines(state.betsFb, state.sumFbUser, ymd, playerName, fxById(), state.settings || {});
+      var sOut = '<div class="fs-group"><div class="fs-name">' + esc(sud.name) + '</div>';
+      if (!sud.lines.length) { sOut += '<div class="muted">ဒီနေ့ ထိုးထားတာ မရှိပါ</div>'; }
+      sud.lines.forEach(function (ln) { sOut += '<div class="fs-line">' + esc(L.fbsumUserDayLineText(ln)) + '</div>'; });
+      if (sud.lines.length) {
+        if (sud.unsettled > 0) sOut += '<div class="muted" style="font-size:12px;padding:2px 0 2px 10px">မပြီးသေးတာ ' + sud.unsettled + ' ကွက်</div>';
+        var sTotCls = (sud.totalNet !== null && sud.totalNet < 0) ? 'fs-total neg' : 'fs-total';
+        sOut += '<div class="' + sTotCls + '">Total' + esc(L.signedPlain(sud.totalNet)) + '</div>';
+      }
+      sOut += '</div>';
+      fbDetailEl.innerHTML = sOut;
+    }
   }
   // Net profit (v2.13, Pho Nov 20, option A): stake - payouts, counting ONLY
   // settled bets. 2D/3D: sessions whose win_number is set (L.periodNet2D3D);
@@ -1912,6 +1940,7 @@ window.toggleAutoSettle = toggleAutoSettle;
 window.openFbSum = openFbSum;
 window.renderFbSum = renderFbSum;
 window.setFbsumUser = setFbsumUser;
+window.setSumFbUser = setSumFbUser;
 window.copyFbSum = copyFbSum;
 window.openHedgeSheet = openHedgeSheet;
 window.toastKickoffPassed = toastKickoffPassed;
