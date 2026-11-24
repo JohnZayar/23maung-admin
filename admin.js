@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.27';
+import * as L from './logic.js?v=2.28';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -1111,8 +1111,9 @@ function renderLedgerFb() {
       var homeCell = '<b>' + esc(r.homeTeam) + '</b>' + (r.homeLine ? '<br><span class="ln">' + esc(r.homeLine) + '</span>' : '');
       var goalOverCell = (r.goalLine ? '<span class="ln">⬆️ ' + esc(r.goalLine) + '</span><br>' : '') + '<b class="amt' + (r.over ? '' : ' zero') + '">' + (gn.side === 'over' ? fmt(L.remainingAfterHedge(r.over, gHedge)) : fmt(r.over)) + '</b>';
       var goalUnderCell = (r.goalLine ? '<span class="ln">⬇️ ' + esc(r.goalLine) + '</span><br>' : '') + '<b class="amt' + (r.under ? '' : ' zero') + '">' + (gn.side === 'under' ? fmt(L.remainingAfterHedge(r.under, gHedge)) : fmt(r.under)) + '</b>';
-      out += '<tr class="mrow1"><td class="tm">' + esc(r.time) + '</td><td>' + homeCell + '</td><td><b>' + esc(r.awayTeam) + '</b></td><td>' + goalOverCell + '</td></tr>';
-      out += '<tr class="mrow2"><td></td><td><b class="amt' + (r.h ? '' : ' zero') + '">' + (bn.side === 'h' ? fmt(L.remainingAfterHedge(r.h, bHedge)) : fmt(r.h)) + '</b></td><td><b class="amt' + (r.a ? '' : ' zero') + '">' + (bn.side === 'a' ? fmt(L.remainingAfterHedge(r.a, bHedge)) : fmt(r.a)) + '</b></td><td>' + goalUnderCell + '</td></tr>';
+      var scoreCell = r.score ? '<b class="led-score">' + esc(r.score) + '</b>' : '';
+      out += '<tr class="mrow1"><td class="tm">' + esc(r.time) + '</td><td>' + homeCell + '</td><td>' + scoreCell + '</td><td><b>' + esc(r.awayTeam) + '</b></td><td>' + goalOverCell + '</td></tr>';
+      out += '<tr class="mrow2"><td></td><td><b class="amt' + (r.h ? '' : ' zero') + '">' + (bn.side === 'h' ? fmt(L.remainingAfterHedge(r.h, bHedge)) : fmt(r.h)) + '</b></td><td></td><td><b class="amt' + (r.a ? '' : ' zero') + '">' + (bn.side === 'a' ? fmt(L.remainingAfterHedge(r.a, bHedge)) : fmt(r.a)) + '</b></td><td>' + goalUnderCell + '</td></tr>';
     });
     out += '</tbody></table>';
   }
