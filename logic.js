@@ -175,6 +175,13 @@ export function computeBodyNet(fbBets, fixturesById, oddsByFixture) {
         const ko = normalizeKickoff(fx.kickoff_utc); if (ko !== null) m.kickoff_utc = ko;
         if (fx.home_mm) m.home_mm = fx.home_mm;
         if (fx.away_mm) m.away_mm = fx.away_mm;
+        // Pho Nov 24: the ledger shows the RESULT (score) when the match
+        // finishes — the fixture's goals ride on the aggregate so the
+        // table can show "2-0" between the teams.
+        if (fx.status === 'finished' && fx.home_goals !== null && fx.home_goals !== undefined && fx.away_goals !== null && fx.away_goals !== undefined) {
+          m.home_goals = fx.home_goals;
+          m.away_goals = fx.away_goals;
+        }
       }
     });
   }
@@ -710,12 +717,14 @@ export function ledgerHeaderText(m) {
 // Unknown kickoff -> '' time; no line -> '' (amounts still show).
 export function ledgerFbTableRow(m) {
   const ko = m ? formatKickoffYangon(m.kickoff_utc) : null;
+  const hasScore = m && m.home_goals !== null && m.home_goals !== undefined && m.away_goals !== null && m.away_goals !== undefined;
   return {
     time: ko || '',
     homeTeam: teamShort((m && m.home_mm) || (m && m.home) || ''),
     homeLine: (m && m.bodyOdds) || '',
     awayTeam: teamShort((m && m.away_mm) || (m && m.away) || ''),
     goalLine: (m && m.goalOdds) || '',
+    score: hasScore ? (m.home_goals + '-' + m.away_goals) : '',
     h: (m && m.h) || 0,
     a: (m && m.a) || 0,
     over: (m && m.over) || 0,
@@ -1154,6 +1163,29 @@ export function pyarFromLine(line) {
   return p === 50 ? 5 : p;
 }
 
+// Parse a Myanmar display odds string into { main, prar }.
+// "2+30" -> { main: 2, prar: 30 }; "2-10" -> { main: 2, prar: -10 };
+// "=-90" -> { main: 0, prar: -90 }; "=" -> { main: 0, prar: 0 };
+// "2=" -> { main: 2, prar: 0 }. Returns null when unparseable (the caller
+// falls back to the API-line derivation). The prar is the SIGNED display
+// price; settlement uses its absolute value for the amount, and the
+// giving/receiving + main rule for which side wins it at the boundary.
+export function parseMyanmarOdds(s) {
+  if (s === null || s === undefined) return null;
+  s = String(s).trim();
+  if (s === '' || s === '=') return { main: 0, prar: 0 };
+  if (s[0] === '=') {
+    const m = s.match(/^=([+-])(\d+)$/);
+    if (!m) return null;
+    return { main: 0, prar: (m[1] === '-' ? -1 : 1) * parseInt(m[2], 10) };
+  }
+  const m = s.match(/^(\d+)(?:([+-])(\d+)|=)?$/);
+  if (!m) return null;
+  const main = parseInt(m[1], 10);
+  if (!m[2]) return { main: main, prar: 0 };
+  return { main: main, prar: (m[2] === '-' ? -1 : 1) * parseInt(m[3], 10) };
+}
+
 // Evaluate one Asian-handicap leg (BODY only).
 // `line` is the raw API line, `margin` is the score difference the line
 // applies to (body pick h: hg-ag with line ah_line; body pick a: ag-hg with
@@ -1177,12 +1209,34 @@ export function pyarFromLine(line) {
 // total == main and its win/loss compares total to |gl_line|; routing a
 // goal leg through the evalLine sign-flip would make a NEGATIVE goal line
 // ("3-45") always win for the over. Do NOT route goal legs through here.
-export function evalLine(line, margin) {
-  const pyar = pyarFromLine(line);
-  const frac = Math.abs(line) % 1;
-  const main = Math.trunc(Math.abs(line));
-  const adj = margin + line;
-  if (frac > 0) {
+// Settlement follows the MYANMAR odds the player saw (Pho Nov 24 — the
+// Yangon 2+30 case): the MAIN line and the prar amount come from the leg's
+// stored Myanmar display (leg.hcp, e.g. "2+30"), NOT from the raw API line.
+// The API line (-1.75) truncates to main 1 with pyar 75, but the display
+// "2+30" means main 2, prar 30 — so a 2-0 result lands ON the main and
+// wins only the prar 30. Using the API line made it a full win (overpaid
+// 1,995 on 23M005 NO.1). The `mm` parameter is { main, prar } from
+// parseMyanmarOdds(leg.hcp); when omitted the old API-line derivation is
+// kept (backward compat for legs stored without a display string).
+export function evalLine(line, margin, mm) {
+  let main, pyar, hasPrar;
+  if (mm && typeof mm.main === 'number' && typeof mm.prar === 'number') {
+    main = mm.main;
+    pyar = Math.abs(mm.prar);
+    hasPrar = pyar > 0;
+  } else {
+    pyar = pyarFromLine(line);
+    const frac = Math.abs(line) % 1;
+    main = Math.trunc(Math.abs(line));
+    hasPrar = frac > 0;
+  }
+  // The boundary and the win/loss are judged against the MAIN line (with
+  // the pick's giving/receiving sign), not the fractional API line — a
+  // whole-number margin either side of the main is a full win/loss, and
+  // exactly ON the main is the prar case (or a push when there is no prar).
+  const signedMain = line < 0 ? -main : main;
+  const adj = margin + signedMain;
+  if (hasPrar) {
     const pyarMargin = line < 0 ? main : -main;
     if (margin === pyarMargin) {
       // 0-main (Pho Nov 22): the pyar goes to the RECEIVING side.
@@ -1198,16 +1252,29 @@ export function evalLine(line, margin) {
 // at the main; "-" line (e.g. 3-45, "3 goals, 45 lose") -> the OVER LOSES
 // the pyar at the main and the UNDER wins it. Away from the main the
 // over/under is decided by total vs |gl_line|.
-export function evalGoalLine(glLine, total, pick) {
-  const g = Math.abs(glLine);
-  const frac = g % 1;
-  const main = Math.trunc(g);
-  const pyar = pyarFromLine(glLine);
-  if (frac > 0 && total === main) {
+export function evalGoalLine(glLine, total, pick, mm) {
+  let main, pyar, hasPrar, g, signedPrar;
+  if (mm && typeof mm.main === 'number' && typeof mm.prar === 'number') {
+    main = mm.main;
+    pyar = Math.abs(mm.prar);
+    signedPrar = mm.prar;
+    hasPrar = pyar > 0;
+    g = main;
+  } else {
+    g = Math.abs(glLine);
+    const frac = g % 1;
+    main = Math.trunc(g);
+    pyar = pyarFromLine(glLine);
+    signedPrar = glLine;
+    hasPrar = frac > 0;
+  }
+  if (hasPrar && total === main) {
     // 0-main (Pho Nov 22, same rule as evalLine by analogy — Pho verified
     // the body case only): at total 0 the over needs goals and got none,
-    // so the over loses the pyar and the under wins it.
-    const overWinsPyar = main === 0 ? glLine < 0 : glLine > 0;
+    // so the over loses the pyar and the under wins it. At main >= 1 the
+    // display prar sign decides: "+" -> over wins the pyar, "-" -> over
+    // loses it (Pho Nov 17, "3-45" example).
+    const overWinsPyar = main === 0 ? false : signedPrar > 0;
     const won = pick === 'over' ? overWinsPyar : !overWinsPyar;
     return { res: won ? 'halfWin' : 'halfLoss', pyar: pyar };
   }
@@ -1233,8 +1300,11 @@ export function settleLeg(leg, fixture) {
   if (leg.kind === 'body') {
     const line = leg.ah_line;
     if (line === null || line === undefined) return null;
-    if (leg.pick === 'h') return evalLine(line, hg - ag);
-    if (leg.pick === 'a') return evalLine(-line, ag - hg);
+    // Myanmar display (Pho Nov 24): the main line and prar come from the
+    // stored display (leg.hcp, e.g. "2+30"), not the raw API line.
+    const mm = parseMyanmarOdds(leg.hcp);
+    if (leg.pick === 'h') return evalLine(line, hg - ag, mm);
+    if (leg.pick === 'a') return evalLine(-line, ag - hg, mm);
     return null;
   }
   if (leg.kind === 'goal') {
@@ -1243,9 +1313,11 @@ export function settleLeg(leg, fixture) {
     const total = hg + ag;
     // Goal legs use evalGoalLine, NOT the evalLine sign-flip: a goal
     // total is always positive, and a negative goal line ("3-45") must
-    // still lose for the over below the main.
-    if (leg.pick === 'over') return evalGoalLine(line, total, 'over');
-    if (leg.pick === 'under') return evalGoalLine(line, total, 'under');
+    // still lose for the over below the main. The main/prar come from the
+    // stored Myanmar goal display (leg.over, e.g. "3+85").
+    const mm = parseMyanmarOdds(leg.over);
+    if (leg.pick === 'over') return evalGoalLine(line, total, 'over', mm);
+    if (leg.pick === 'under') return evalGoalLine(line, total, 'under', mm);
     return null;
   }
   return null;
