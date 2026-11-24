@@ -770,9 +770,9 @@ export function legTeamName(leg, which, fixturesById) {
 // A leg becomes one entry: body -> its picked team; goal -> the match's
 // home team (short) with the over/under arrow (goal lines carry no team
 // of their own; Pho's format puts the home team there).
-// One body bet's entry lines (shared by groupBettorEntries and
-// groupBettorEntriesByDay): a leg becomes one entry — body -> its picked
-// team; goal -> the match's home team (short) with the over/under arrow.
+// One body bet's entry lines (used by groupBettorEntries): a leg becomes
+// one entry — body -> its picked team; goal -> the match's home team
+// (short) with the over/under arrow.
 export function bettorEntryLines(bet, fixturesById) {
   const lines = [];
   (bet.legs || []).forEach(function (leg) {
@@ -798,56 +798,69 @@ export function groupBettorEntries(betsFb, nameOf, fixturesById) {
   order.sort();
   return order.map(function (name) { return { name: name, lines: byName[name] }; });
 }
-// Signed net text for the fb summary: '+5,605' / '-2,000' / '—' when null.
-export function signedNetText(n) {
+// Signed plain net (Pho Nov 24 exact format, no commas): '+500' / '-1000'
+// / '—' when null.
+export function signedPlain(n) {
   if (n === null || n === undefined) return '—';
-  return (n >= 0 ? '+' : '') + (n || 0).toLocaleString('en-US');
+  return (n >= 0 ? '+' : '') + String(n);
 }
-// Group body bets by bettor AND Yangon day (Admin v2.29, Pho Nov 24):
-// each user gets their days (newest first), each day its entry lines
-// plus the user's win/loss (အရှုံးအမြတ်) for that day — the PLAYER's
-// net (payout - stake) over settled bets only (fbBetNet, negated), or
-// null when nothing that day is settled yet. A day with unsettled bets
-// counts them in `unsettled` so the net is never misread as final.
-// Bets whose date cannot be resolved land in a 'ရက်မသိ' day (ymd null)
-// shown LAST — shown, never hidden. Returns { groups, totalNet,
-// totalSettled }: totalNet is the sum of all settled player nets (null
-// when totalSettled is 0). Only type 'body' bets (same scope as
-// groupBettorEntries); parlays stay in the မောင်းစာရင်း.
-export function groupBettorEntriesByDay(betsFb, nameOf, fixturesById) {
-  const byName = {};
-  const order = [];
+function padL(s, n) { s = String(s); while (s.length < n) s += ' '; return s; }
+function padR(s, n) { s = String(s); while (s.length < n) s = ' ' + s; return s; }
+// One bet leg's line for the fb summary user/day view (Pho Nov 24 exact
+// format): '1=    Mu 1000 -1000' — odds, team, stake, per-leg net.
+export function fbsumUserDayLineText(row) {
+  const odds = row.odds || '';
+  const team = row.team || '';
+  const stake = String(row.stake || 0);
+  const net = signedPlain(row.net);
+  return padL(odds, 4) + ' ' + padL(team, 4) + ' ' + padR(stake, 5) + ' ' + padR(net, 6);
+}
+// Per-user, per-day football bet lines (Admin v2.30, Pho Nov 24): the
+// selected user's body bets on the selected Yangon day, one line per leg,
+// each with its own win/loss — the leg's net from its settlement result
+// (settleLeg, Myanmar-display-aware) + the body commission
+// (settings.body_comm_big, default 5): win +stake*keep, halfWin
+// +stake*pyar/100*keep, halfLoss -stake*pyar/100, loss -stake, push 0.
+// Unsettled legs (fixture not finished) have net null and are excluded
+// from the total. Returns { name, ymd, lines, totalNet, settled,
+// unsettled }; totalNet is null when nothing is settled yet. Only type
+// 'body' bets (same scope as groupBettorEntries); parlays stay in the
+// မောင်းစာရင်း.
+export function userDayFbLines(betsFb, playerId, ymd, nameOf, fixturesById, settings) {
+  const comm = (settings && typeof settings.body_comm_big === 'number') ? settings.body_comm_big : 5;
+  const keep = 1 - comm / 100;
+  const name = (nameOf && nameOf(playerId)) || String(playerId || '');
+  const lines = [];
+  let totalNet = 0, settled = 0, unsettled = 0;
   (betsFb || []).forEach(function (b) {
-    if (b.type !== 'body') return;
-    const name = (nameOf && nameOf(b.player)) || String(b.player || '');
-    if (!byName[name]) { byName[name] = {}; order.push(name); }
-    const ymd = adminBetDate(b, null, 'fb');
-    const key = ymd || '';
-    if (!byName[name][key]) byName[name][key] = { ymd: ymd, lines: [], net: 0, settled: 0, unsettled: 0 };
-    const day = byName[name][key];
-    day.lines.push.apply(day.lines, bettorEntryLines(b, fixturesById));
-    const bn = fbBetNet(b);
-    if (bn === null) { day.unsettled++; } else { day.net += -bn; day.settled++; }
-  });
-  order.sort();
-  let totalNet = 0, totalSettled = 0;
-  const groups = order.map(function (name) {
-    const daysMap = byName[name];
-    const days = Object.keys(daysMap).map(function (k) { return daysMap[k]; });
-    days.sort(function (a, b) {
-      if (!a.ymd && !b.ymd) return 0;
-      if (!a.ymd) return 1;
-      if (!b.ymd) return -1;
-      return b.ymd < a.ymd ? -1 : (b.ymd > a.ymd ? 1 : 0);
+    if (b.type !== 'body' || b.player !== playerId) return;
+    if (adminBetDate(b, null, 'fb') !== ymd) return;
+    (b.legs || []).forEach(function (leg) {
+      let odds = '', team = '';
+      if (leg.kind === 'body') {
+        odds = leg.hcp || lineToMyanmar(leg.ah_line) || '';
+        team = teamShort(legTeamName(leg, leg.pick === 'h' ? 'h' : 'a', fixturesById));
+      } else if (leg.kind === 'goal') {
+        odds = leg.over || lineToMyanmar(leg.gl_line) || '';
+        team = teamShort(legTeamName(leg, 'h', fixturesById));
+      } else return;
+      const st = leg.stake || 0;
+      const fx = (fixturesById || {})[(leg && leg.fixture) || ''];
+      const r = settleLeg(leg, fx);
+      let net = null;
+      if (r) {
+        if (r.res === 'win') net = Math.round(st * keep);
+        else if (r.res === 'halfWin') net = Math.round(st * (r.pyar || 0) / 100 * keep);
+        else if (r.res === 'halfLoss') net = -Math.round(st * (r.pyar || 0) / 100);
+        else if (r.res === 'loss') net = -st;
+        else if (r.res === 'push') net = 0;
+        if (net !== null) { totalNet += net; settled++; }
+      }
+      if (net === null) unsettled++;
+      lines.push({ odds: odds, team: team, stake: st, net: net });
     });
-    let gNet = 0, gSettled = 0;
-    days.forEach(function (d) {
-      if (d.settled === 0) { d.net = null; } else { gNet += d.net; gSettled += d.settled; }
-    });
-    totalNet += gNet; totalSettled += gSettled;
-    return { name: name, days: days, totalNet: gSettled === 0 ? null : gNet, totalSettled: gSettled };
   });
-  return { groups: groups, totalNet: totalSettled === 0 ? null : totalNet, totalSettled: totalSettled };
+  return { name: name, ymd: ymd, lines: lines, totalNet: settled === 0 ? null : totalNet, settled: settled, unsettled: unsettled };
 }
 // Group hedges by bookie -> [{ bookie, lines: [entryLineText] }].
 // Bookies in first-appearance order; within a bookie, lines are ordered by
@@ -878,25 +891,18 @@ export function groupHedgeEntries(hedges) {
     return { bookie: bookie, lines: lines };
   });
 }
-// 'စာရင်းချုပ် ကူးမယ်' copy text (v2.29): per user, per Yangon day,
-// one-line entries, the day's အရှုံးအမြတ်, then the grand total.
-// byDay is the groupBettorEntriesByDay result.
-export function fbsumCopyText(byDay, hedgeGroups) {
+// 'စာရင်းချုပ် ကူးမယ်' copy text (v2.30, Pho Nov 24 exact format):
+// the selected user's name, their day's lines, then the Total.
+// userDay is the userDayFbLines result.
+export function fbsumCopyText(userDay, hedgeGroups) {
   const parts = [];
-  const bettorGroups = (byDay && byDay.groups) || [];
-  parts.push('ထိုးသားစာရင်း');
-  bettorGroups.forEach(function (g) {
-    (g.days || []).forEach(function (d) {
-      parts.push('');
-      parts.push(g.name + ' — ' + (d.ymd ? fmtDateOnly(d.ymd) : 'ရက်မသိ'));
-      d.lines.forEach(function (ln) { parts.push(ln); });
-      let netLn = 'အရှုံးအမြတ်: ' + signedNetText(d.net);
-      if (d.unsettled > 0) netLn += ' · မပြီးသေးတာ ' + d.unsettled + ' ကွက်';
-      parts.push(netLn);
-    });
-  });
+  parts.push((userDay && userDay.name) || '');
   parts.push('');
-  parts.push('စုစုပေါင်း အရှုံးအမြတ်: ' + signedNetText(byDay ? byDay.totalNet : null));
+  const lines = (userDay && userDay.lines) || [];
+  if (!lines.length) parts.push('ဒီနေ့ ထိုးထားတာ မရှိပါ');
+  lines.forEach(function (ln) { parts.push(fbsumUserDayLineText(ln)); });
+  parts.push('');
+  parts.push('Total' + signedPlain(userDay ? userDay.totalNet : null));
   parts.push('');
   parts.push('အကန်စာရင်း');
   if (!hedgeGroups || !hedgeGroups.length) {

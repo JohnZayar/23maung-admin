@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.29';
+import * as L from './logic.js?v=2.30';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -16,6 +16,7 @@ const state = {
   requests: [],        // m23_requests (pending + decided, for counts)
   players: [],         // m23_players
   selUser: null,       // Users screen (Admin v2.27): selected player id
+  fbsumUser: null,     // fb summary (Admin v2.30): selected player id for the user picker
   bets2d: [], bets3d: [], betsFb: [],
   fixtures: [],        // m23_fixtures
   oddsByFixture: {},  // m23_odds by fixture id (Admin v2.18: goal/body line fallback for the ledger table)
@@ -397,7 +398,7 @@ function renderAll() {
   renderBets();
   renderLedger2D(); renderLedger3D(); renderLedgerFb();
   renderBs(); renderBlocked(); updPend();
-  renderDashboard(); renderSummary(); renderResults(); renderSettings(); renderHomeSessions(); renderUsers();
+  renderDashboard(); renderSummary(); renderResults(); renderSettings(); renderHomeSessions(); renderUsers(); renderFbSum();
   syncLimitInputs();
 }
 
@@ -420,7 +421,7 @@ function ensureAdminDate() {
 }
 function syncAdminDateText() {
   const txt = state.adminDate ? L.fmtDateOnly(state.adminDate) : '';
-  ['adminDateTextLedger', 'adminDateTextBs', 'adminDateTextBets', 'adminDateTextSummary'].forEach(function (id) {
+  ['adminDateTextLedger', 'adminDateTextBs', 'adminDateTextBets', 'adminDateTextSummary', 'adminDateTextFbsum'].forEach(function (id) {
     const el = $(id);
     if (el) el.textContent = txt;
   });
@@ -1306,32 +1307,54 @@ function copyBs() {
 }
 
 // ---------------------------------------------------------------- fb summary (စာရင်းချုပ်, v1.6)
-// Separate screen (reached from the body ledger): ထိုးသားစာရင်း + အကန်စာရင်း
-// in Pho's EXACT one-line-per-entry format. NO aggregate totals anywhere.
-function openFbSum() { renderFbSum(); go('scr-fbsum'); }
+// Separate screen (reached from the body ledger): pick ONE day (shared
+// Admin date) + ONE user, then that user's bets for that day, one line
+// per leg with its own net, then Total — Pho Nov 24 exact format.
+// (v2.29's all-users/all-days list was rejected by Pho: 'အဲ့လိုမဟုတ်ဘူး'.)
+// Users with body fb bets, for the user picker — [{id, name}], by name.
+function fbsumUsers() {
+  const ids = {};
+  (state.betsFb || []).forEach(function (b) { if (b.type === 'body') ids[b.player] = true; });
+  return Object.keys(ids).map(function (pid) { return { id: pid, name: playerName(pid) }; })
+    .sort(function (a, b) { return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0); });
+}
+function setFbsumUser(pid) { state.fbsumUser = pid; renderFbSum(); }
+function openFbSum() {
+  const users = fbsumUsers();
+  if (!state.fbsumUser || !users.some(function (u) { return u.id === state.fbsumUser; })) {
+    state.fbsumUser = users.length ? users[0].id : null;
+  }
+  renderFbSum(); go('scr-fbsum');
+}
 function renderFbSum() {
   var w = $('fbsumList');
   if (!w) return;
-  // v2.29 (Pho Nov 24): per user, per Yangon day, with that day's
-  // အရှုံးအမြတ် under its lines and the grand total at the bottom.
-  var byDay = L.groupBettorEntriesByDay(state.betsFb, playerName, fxById());
-  var hedges = L.groupHedgeEntries(state.hedges);
+  const ymd = ensureAdminDate();
+  const users = fbsumUsers();
+  if (!state.fbsumUser || !users.some(function (u) { return u.id === state.fbsumUser; })) {
+    state.fbsumUser = users.length ? users[0].id : null;
+  }
+  const sel = $('fbsumUserSel');
+  if (sel) {
+    sel.innerHTML = users.map(function (u) { return '<option value="' + esc(u.id) + '"' + (u.id === state.fbsumUser ? ' selected' : '') + '>' + esc(u.name) + '</option>'; }).join('');
+    sel.value = state.fbsumUser || '';
+  }
   var out = '';
-  out += '<div class="fs-group"><div class="fs-head">ထိုးသားစာရင်း</div>';
-  if (!byDay.groups.length) { out += '<div class="muted">ထိုးသား မရှိသေးပါ</div>'; }
-  byDay.groups.forEach(function (g) {
-    g.days.forEach(function (d) {
-      out += '<div class="fs-name">' + esc(g.name) + ' — ' + esc(d.ymd ? L.fmtDateOnly(d.ymd) : 'ရက်မသိ') + '</div>';
-      d.lines.forEach(function (ln) { out += '<div class="fs-line">' + esc(ln) + '</div>'; });
-      var netTxt = 'အရှုံးအမြတ်: ' + L.signedNetText(d.net);
-      if (d.unsettled > 0) netTxt += ' · မပြီးသေးတာ ' + d.unsettled + ' ကွက်';
-      var netCls = (d.net !== null && d.net < 0) ? 'fs-net neg' : 'fs-net';
-      out += '<div class="' + netCls + '">' + esc(netTxt) + '</div>';
-    });
-  });
-  out += '</div>';
-  var totCls = (byDay.totalNet !== null && byDay.totalNet < 0) ? 'fs-total neg' : 'fs-total';
-  out += '<div class="' + totCls + '">စုစုပေါင်း အရှုံးအမြတ်: ' + esc(L.signedNetText(byDay.totalNet)) + '</div>';
+  const hedges = L.groupHedgeEntries(state.hedges);
+  if (!state.fbsumUser) {
+    out += '<div class="muted">ထိုးသား မရှိသေးပါ</div>';
+  } else {
+    const ud = L.userDayFbLines(state.betsFb, state.fbsumUser, ymd, playerName, fxById(), state.settings || {});
+    out += '<div class="fs-group"><div class="fs-name">' + esc(ud.name) + '</div>';
+    if (!ud.lines.length) { out += '<div class="muted">ဒီနေ့ ထိုးထားတာ မရှိပါ</div>'; }
+    ud.lines.forEach(function (ln) { out += '<div class="fs-line">' + esc(L.fbsumUserDayLineText(ln)) + '</div>'; });
+    if (ud.lines.length) {
+      if (ud.unsettled > 0) out += '<div class="muted" style="font-size:12px;padding:2px 0 2px 10px">မပြီးသေးတာ ' + ud.unsettled + ' ကွက်</div>';
+      var totCls = (ud.totalNet !== null && ud.totalNet < 0) ? 'fs-total neg' : 'fs-total';
+      out += '<div class="' + totCls + '">Total' + esc(L.signedPlain(ud.totalNet)) + '</div>';
+    }
+    out += '</div>';
+  }
   out += '<div class="fs-group"><div class="fs-head">အကန်စာရင်း</div>';
   if (!hedges.length) { out += '<div class="muted">အကန် မရှိသေးပါ</div>'; }
   hedges.forEach(function (g) {
@@ -1342,9 +1365,11 @@ function renderFbSum() {
   w.innerHTML = out;
 }
 function copyFbSum() {
-  var byDay = L.groupBettorEntriesByDay(state.betsFb, playerName, fxById());
-  var hedges = L.groupHedgeEntries(state.hedges);
-  var txt = L.fbsumCopyText(byDay, hedges);
+  if (!state.fbsumUser) { toast('ထိုးသား မရှိသေးပါ'); return; }
+  const ymd = ensureAdminDate();
+  const ud = L.userDayFbLines(state.betsFb, state.fbsumUser, ymd, playerName, fxById(), state.settings || {});
+  const hedges = L.groupHedgeEntries(state.hedges);
+  const txt = L.fbsumCopyText(ud, hedges);
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(txt).then(function () { toast('ကူးယူပြီးပါပြီ'); }, function () { toast('ကူးလို့ မရပါ'); });
   } else {
