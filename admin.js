@@ -1911,6 +1911,7 @@ window.settleFootballManual = settleFootballManual;
 window.toggleAutoSettle = toggleAutoSettle;
 window.openFbSum = openFbSum;
 window.renderFbSum = renderFbSum;
+window.setFbsumUser = setFbsumUser;
 window.copyFbSum = copyFbSum;
 window.openHedgeSheet = openHedgeSheet;
 window.toastKickoffPassed = toastKickoffPassed;
