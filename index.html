@@ -111,6 +111,8 @@
   /* Hedge sheet side picker (Admin v2.38 — new 0-bet hedge only). */
   .hs-side { font: inherit; font-size: 13px; font-weight: bold; color: #1e3a5f; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 2px 4px; }
   .led-fb-table td .amt { font-size: 14px; }
+  /* Net-red (Admin v2.40, Pho Nov 26): the larger net side goes red. */
+  .led-fb-table td .amt.over { color: #b91c1c; }
   .bet-row.over .amt, .bet-row.over .what { color: #b91c1c; font-weight: bold; }
   .bet-row.win { background: #dcfce7; }
   .bet-row.win .what, .bet-row.win .amt { color: #166534; }
@@ -251,7 +253,7 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.39</span></div>
+<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.40</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
@@ -411,7 +413,7 @@
   </div>
   <div class="card" id="ledPaneFb" style="display:none">
     <div class="lim-row">လီမစ် (တစ်ကွက်) <input type="number" id="limLedFb" value="8000" onchange="onLimitChange('fb')"> ကျပ်</div>
-    <div class="muted" style="margin-bottom:6px">လီမစ်ကျော်ရင် အနီပေါ်မယ် · <span id="ledSubFb">စုစုပေါင်း 17,000 ကျပ်</span></div>
+    <div class="muted" style="margin-bottom:6px">နှစ်ဘက် နှုတ်ပြီး လိမစ်ကျော်ရင် များတဲ့ဘက် အနီပေါ်မယ် · <span id="ledSubFb">စုစုပေါင်း 17,000 ကျပ်</span></div>
     <div id="ledListFb"></div>
   </div>
 </div>
@@ -567,6 +569,6 @@
 <!-- record date picker calendar popup (Admin v2.3) -->
 <div id="adminCalOverlay" onclick="if(event.target===this)closeAdminCal()"><div class="acal-card" id="adminCalCard"></div></div>
 
-<script type="module" src="admin.js?v=2.39"></script>
+<script type="module" src="admin.js?v=2.40"></script>
 </body>
 </html>
