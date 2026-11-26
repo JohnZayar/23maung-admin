@@ -806,14 +806,45 @@ export function signedPlain(n) {
 }
 function padL(s, n) { s = String(s); while (s.length < n) s += ' '; return s; }
 function padR(s, n) { s = String(s); while (s.length < n) s = ' ' + s; return s; }
-// One bet leg's line for the fb summary user/day view (Pho Nov 24 exact
-// format): '1=    Mu 1000 -1000' — odds, team, stake, per-leg net.
+// Per-day display numbers (Player voucherDisplayNos rule, shared by the
+// fbvouch screen and the fb summary leg lines): 1-based position in
+// (voucher_no, created) order, so NO.1 is the day's first-placed voucher
+// and a leg's NO. always matches its voucher card. Returns an array
+// parallel to the input list (out[i] = display no of bets[i]).
+export function fbDispNos(bets) {
+  const list = bets || [];
+  const order = list.map(function (b, idx) { return idx; });
+  order.sort(function (a, b) {
+    const na = (list[a] && list[a].voucher_no) || 0;
+    const nb = (list[b] && list[b].voucher_no) || 0;
+    if (na !== nb) return na - nb;
+    const ca = (list[a] && list[a].created) || '';
+    const cb = (list[b] && list[b].created) || '';
+    if (ca !== cb) return ca < cb ? -1 : 1;
+    return a - b;
+  });
+  const out = [];
+  order.forEach(function (idx, i) { out[idx] = i + 1; });
+  return out;
+}
+// One bet leg's line for the fb summary user/day view (Admin v2.36, Pho
+// Nov 26 option B): NO. + kind + odds + team + stake + per-leg net +
+// mark + score — 'NO.3 ဘော်ဒီ 3-35 ဘာစီလိုနာ 1000 -350 ❌ 2-0'.
+// Mark: win/halfWin ✅, loss/halfLoss ❌, push =, unsettled no mark.
+// Score: home-away ('2-0') when the fixture is finished, '–' otherwise.
+// row: { no, kind ('body'|'goal'), odds, team, stake, net, res, score }.
 export function fbsumUserDayLineText(row) {
+  const no = row.no ? 'NO.' + row.no : '';
+  const kind = row.kind === 'goal' ? 'ဂိုးပေါင်း' : (row.kind === 'body' ? 'ဘော်ဒီ' : '');
   const odds = row.odds || '';
   const team = row.team || '';
   const stake = String(row.stake || 0);
   const net = signedPlain(row.net);
-  return padL(odds, 4) + ' ' + padL(team, 4) + ' ' + padR(stake, 5) + ' ' + padR(net, 6);
+  const mark = row.res === 'win' || row.res === 'halfWin' ? '✅'
+    : row.res === 'loss' || row.res === 'halfLoss' ? '❌'
+    : row.res === 'push' ? '=' : '';
+  const score = row.score || '–';
+  return padL(no, 5) + ' ' + padL(kind, 8) + ' ' + padL(odds, 4) + ' ' + padL(team, 4) + ' ' + padR(stake, 5) + ' ' + padR(net, 6) + ' ' + (mark ? mark + ' ' : '') + score;
 }
 // Per-user, per-day football bet lines (Admin v2.30, Pho Nov 24): the
 // selected user's body bets on the selected Yangon day, one line per leg,
@@ -825,16 +856,32 @@ export function fbsumUserDayLineText(row) {
 // from the total. Returns { name, ymd, lines, totalNet, settled,
 // unsettled }; totalNet is null when nothing is settled yet. Only type
 // 'body' bets (same scope as groupBettorEntries); parlays stay in the
-// မောင်းစာရင်း.
+// မောင်းစာရင်း. v2.36: each line also carries no (voucher display NO.,
+// computed over ALL this user's day bets so it matches the voucher card),
+// kind ('body'|'goal'), res and score for the option-B format.
 export function userDayFbLines(betsFb, playerId, ymd, nameOf, fixturesById, settings) {
   const comm = (settings && typeof settings.body_comm_big === 'number') ? settings.body_comm_big : 5;
   const keep = 1 - comm / 100;
   const name = (nameOf && nameOf(playerId)) || String(playerId || '');
   const lines = [];
   let totalNet = 0, settled = 0, unsettled = 0;
-  (betsFb || []).forEach(function (b) {
+  // Per-day voucher numbers (v2.36, Pho Nov 26 option B): the NO. of each
+  // leg is its voucher's display number, computed over ALL this user's day
+  // bets (body + parlay) in (voucher_no, created) order — the same rule
+  // as the Player / fbvouch screen, so a leg's NO. always matches its
+  // voucher card. Two identical bets (e.g. the Nov 25 NO.34/NO.35 pair)
+  // are distinguishable ONLY by their NO.
+  const dayIdx = [];
+  (betsFb || []).forEach(function (b, i) {
+    if (b && b.player === playerId && adminBetDate(b, null, 'fb') === ymd) dayIdx.push(i);
+  });
+  const nos = fbDispNos(dayIdx.map(function (i) { return betsFb[i]; }));
+  const noByIdx = {};
+  dayIdx.forEach(function (i, j) { noByIdx[i] = nos[j]; });
+  (betsFb || []).forEach(function (b, bi) {
     if (b.type !== 'body' || b.player !== playerId) return;
     if (adminBetDate(b, null, 'fb') !== ymd) return;
+    const dispNo = noByIdx[bi] || 0;
     (b.legs || []).forEach(function (leg) {
       let odds = '', team = '';
       if (leg.kind === 'body') {
@@ -857,10 +904,37 @@ export function userDayFbLines(betsFb, playerId, ymd, nameOf, fixturesById, sett
         if (net !== null) { totalNet += net; settled++; }
       }
       if (net === null) unsettled++;
-      lines.push({ odds: odds, team: team, stake: st, net: net });
+      // Score: home-away when the fixture is finished with goals ('2-0'),
+      // null (renders '–') otherwise. res drives the ✅/❌/= mark.
+      let score = null;
+      if (fx && fx.status === 'finished' && fx.home_goals !== null && fx.home_goals !== undefined && fx.away_goals !== null && fx.away_goals !== undefined) {
+        score = fx.home_goals + '-' + fx.away_goals;
+      }
+      lines.push({ no: dispNo, kind: leg.kind, odds: odds, team: team, stake: st, net: net, res: r ? r.res : null, score: score });
     });
   });
   return { name: name, ymd: ymd, lines: lines, totalNet: settled === 0 ? null : totalNet, settled: settled, unsettled: unsettled };
+}
+// Hedge day filter (Admin v2.36, Pho Nov 26): keep only the hedges whose
+// match kicked off on the selected Yangon day. A hedge's `fixture` is the
+// API id; resolve it to the fixture row via api_id (or the PB id directly),
+// then compare the kickoff's Yangon date (yangonDateOf) with ymd. A hedge
+// whose fixture cannot be resolved is EXCLUDED (fail-closed) — without a
+// day it must never leak onto every day's view. The hedge `date` field
+// (DD-MM-YY) is NOT used: it is a different format from the admin day
+// (YYYY-MM-DD). Returns the filtered hedge rows (same shape as the input).
+export function filterHedgesByDay(hedges, fixturesById, ymd) {
+  const byApi = {};
+  Object.keys(fixturesById || {}).forEach(function (id) {
+    const f = fixturesById[id];
+    if (f && f.api_id !== null && f.api_id !== undefined && f.api_id !== '') byApi[String(f.api_id)] = f;
+  });
+  return (hedges || []).filter(function (h) {
+    if (!h) return false;
+    const fx = byApi[String(h.fixture || '')] || (fixturesById || {})[h.fixture || ''];
+    if (!fx || !fx.kickoff_utc) return false;
+    return yangonDateOf(fx.kickoff_utc) === ymd;
+  });
 }
 // Group hedges by bookie -> [{ bookie, lines: [entryLineText] }].
 // Bookies in first-appearance order; within a bookie, lines are ordered by
