@@ -1114,6 +1114,14 @@ function ledgerFbRows() {
   });
   return L.sortBodyNetByKickoff(rows);
 }
+// Net-red pair (Admin v2.40, Pho Nov 26): for one side pair (a, b) the
+// larger side goes red only when |a-b| > lim (strictly; net == limit
+// is NOT red). Equal sides, or a net at/under the limit, -> no red.
+function netRedPair(a, b, lim) {
+  var x = a || 0, y = b || 0, l = lim || 0;
+  if (Math.abs(x - y) <= l) return { aRed: false, bRed: false };
+  return x > y ? { aRed: true, bRed: false } : { aRed: false, bRed: true };
+}
 function renderLedgerFb() {
   var w = $('ledListFb');
   if (!w) return;
@@ -1137,10 +1145,14 @@ function renderLedgerFb() {
   // away | goal-over line+money, then home money | away money |
   // goal-under line+money. Kickoff order comes from ledgerFbRows
   // (BODY_NET + the day's scheduled 0-bet fixtures, earliest-first).
-  // The limit red does NOT apply
-  // to the table — the limit is per single bet, and the table shows
-  // per-side TOTALS — it stays on the parlay rows below, which are
-  // still one row per bet.
+  // Net-red (Admin v2.40, Pho Nov 26 21:51-21:54): the limit is on the
+  // EXCESS after balancing both sides, BEFORE settlement — never on
+  // the total sum. Per match, body (home/away) and goal (over/under)
+  // are separate pairs; the larger DISPLAYED side (post-hedge
+  // remaining) goes red iff |A-B| > limit (strictly; net == limit is
+  // NOT red). Finished matches (score shown) carry no red — their
+  // exposure is already decided. Parlay rows below keep their own
+  // per-bet red, unchanged.
   // Admin v2.38 (Pho Nov 26): bet-backed matches + the day's scheduled
   // 0-bet fixtures; every match's rows open the hedge sheet on tap.
   LEDGER_FB_ROWS = ledgerFbRows();
@@ -1160,15 +1172,25 @@ function renderLedgerFb() {
       var bHedge = hedges.body ? hedges.body.amount : 0;
       var gHedge = hedges.goal ? hedges.goal.amount : 0;
       var homeCell = '<b>' + esc(r.homeTeam) + '</b>' + (r.homeLine ? '<br><span class="ln">' + esc(r.homeLine) + '</span>' : '');
-      var goalOverCell = (r.goalLine ? '<span class="ln">⬆️ ' + esc(r.goalLine) + '</span><br>' : '') + '<b class="amt' + (r.over ? '' : ' zero') + '">' + (gn.side === 'over' ? fmt(L.remainingAfterHedge(r.over, gHedge)) : fmt(r.over)) + '</b>';
-      var goalUnderCell = (r.goalLine ? '<span class="ln">⬇️ ' + esc(r.goalLine) + '</span><br>' : '') + '<b class="amt' + (r.under ? '' : ' zero') + '">' + (gn.side === 'under' ? fmt(L.remainingAfterHedge(r.under, gHedge)) : fmt(r.under)) + '</b>';
+      // Displayed amounts (v2.20): the net side shows the post-hedge
+      // remaining, the other side its gross total. The net-red is
+      // computed from THESE displayed amounts, never the gross.
+      var dispH = bn.side === 'h' ? L.remainingAfterHedge(r.h, bHedge) : r.h;
+      var dispA = bn.side === 'a' ? L.remainingAfterHedge(r.a, bHedge) : r.a;
+      var dispO = gn.side === 'over' ? L.remainingAfterHedge(r.over, gHedge) : r.over;
+      var dispU = gn.side === 'under' ? L.remainingAfterHedge(r.under, gHedge) : r.under;
+      // Finished match (score shown) = exposure already decided: no red.
+      var bRed = r.score ? { aRed: false, bRed: false } : netRedPair(dispH, dispA, lim);
+      var gRed = r.score ? { aRed: false, bRed: false } : netRedPair(dispO, dispU, lim);
+      var goalOverCell = (r.goalLine ? '<span class="ln">⬆️ ' + esc(r.goalLine) + '</span><br>' : '') + '<b class="amt' + (r.over ? '' : ' zero') + (gRed.aRed ? ' over' : '') + '">' + fmt(dispO) + '</b>';
+      var goalUnderCell = (r.goalLine ? '<span class="ln">⬇️ ' + esc(r.goalLine) + '</span><br>' : '') + '<b class="amt' + (r.under ? '' : ' zero') + (gRed.bRed ? ' over' : '') + '">' + fmt(dispU) + '</b>';
       var scoreCell = r.score ? '<b class="led-score">' + esc(r.score) + '</b>' : '';
       // Tap a match's rows -> hedge sheet (v2.38, delegated — see
       // onLedgerFbTap); a passed match only toasts (v1.7 rule, unchanged).
       var passed = !L.canHedgeMatch(m);
       var tapAttr = passed ? ' data-lh-passed="1"' : ' data-lh="' + idx + '"';
       out += '<tr class="mrow1"' + tapAttr + ' tabindex="0" role="button"><td class="tm">' + esc(r.time) + '</td><td>' + homeCell + '</td><td>' + scoreCell + '</td><td><b>' + esc(r.awayTeam) + '</b></td><td>' + goalOverCell + '</td></tr>';
-      out += '<tr class="mrow2"' + tapAttr + ' tabindex="0" role="button"><td></td><td><b class="amt' + (r.h ? '' : ' zero') + '">' + (bn.side === 'h' ? fmt(L.remainingAfterHedge(r.h, bHedge)) : fmt(r.h)) + '</b></td><td></td><td><b class="amt' + (r.a ? '' : ' zero') + '">' + (bn.side === 'a' ? fmt(L.remainingAfterHedge(r.a, bHedge)) : fmt(r.a)) + '</b></td><td>' + goalUnderCell + '</td></tr>';
+      out += '<tr class="mrow2"' + tapAttr + ' tabindex="0" role="button"><td></td><td><b class="amt' + (r.h ? '' : ' zero') + (bRed.aRed ? ' over' : '') + '">' + fmt(dispH) + '</b></td><td></td><td><b class="amt' + (r.a ? '' : ' zero') + (bRed.bRed ? ' over' : '') + '">' + fmt(dispA) + '</b></td><td>' + goalUnderCell + '</td></tr>';
     });
     out += '</tbody></table>';
   }
@@ -2328,6 +2350,7 @@ export { renderAll, renderBets, renderLedger2D, renderLedger3D, renderLedgerFb, 
 export { renderUsers, selectUser, resetUserPass, toggleUserStatus, adjustUserBalance };
 export { fbvouchUsers, fbvouchUsersFrom, setFbvouchUser, openFbVouch, openFbVouchFromSummary, fbvouchBack, renderFbVouch, fbvouchCardHtml, fbvouchLegLabel, fbvouchSlipLeg, fbvouchEval, fbvouchDispNos, fbvouchDayBets, fmtTimeYangon, playerCode, playerCodeOf, mirrorOdds };
 export { renderBsBody, openHedgeSheet, openLedgerHedge, openHedgeSheetFor, ledgerFbRows, onLedgerFbTap, updateHedgeRemain }; // test hooks (v2.19, v2.38)
+export { netRedPair }; // test hook (v2.40 net-red)
 export { ensureAdminDate, setAdminDate, syncAdminDateText, openAdminCal, closeAdminCal, renderAdminCal, adminCalMove, adminCalPick, adminCalQuick };
 export { resolveAdminPeriod, setAdminPeriod, syncAdminPeriod };
 // Test hook (Node tests only): replace the live state + aggregates wholesale
