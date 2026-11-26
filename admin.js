@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.31';
+import * as L from './logic.js?v=2.32';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -1343,11 +1343,15 @@ function renderFbSum() {
     sel.value = state.fbsumUser || '';
   }
   var out = '';
-  const hedges = L.groupHedgeEntries(state.hedges);
+  // Hedge day filter (v2.36): only this day's hedges — the Nov 21 Man City
+  // hedge must not render on the Nov 25 view. Unresolvable hedges are
+  // excluded (fail-closed) by filterHedgesByDay.
+  const fxMap = fxById();
+  const hedges = L.groupHedgeEntries(L.filterHedgesByDay(state.hedges, fxMap, ymd));
   if (!state.fbsumUser) {
     out += '<div class="muted">ထိုးသား မရှိသေးပါ</div>';
   } else {
-    const ud = L.userDayFbLines(state.betsFb, state.fbsumUser, ymd, playerName, fxById(), state.settings || {});
+    const ud = L.userDayFbLines(state.betsFb, state.fbsumUser, ymd, playerName, fxMap, state.settings || {});
     out += '<div class="fs-group"><div class="fs-name">' + esc(ud.name) + '</div>';
     if (!ud.lines.length) { out += '<div class="muted">ဒီနေ့ ထိုးထားတာ မရှိပါ</div>'; }
     ud.lines.forEach(function (ln) { out += '<div class="fs-line">' + esc(L.fbsumUserDayLineText(ln)) + '</div>'; });
@@ -1370,8 +1374,9 @@ function renderFbSum() {
 function copyFbSum() {
   if (!state.fbsumUser) { toast('ထိုးသား မရှိသေးပါ'); return; }
   const ymd = ensureAdminDate();
-  const ud = L.userDayFbLines(state.betsFb, state.fbsumUser, ymd, playerName, fxById(), state.settings || {});
-  const hedges = L.groupHedgeEntries(state.hedges);
+  const fxMap = fxById();
+  const ud = L.userDayFbLines(state.betsFb, state.fbsumUser, ymd, playerName, fxMap, state.settings || {});
+  const hedges = L.groupHedgeEntries(L.filterHedgesByDay(state.hedges, fxMap, ymd));
   const txt = L.fbsumCopyText(ud, hedges);
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(txt).then(function () { toast('ကူးယူပြီးပါပြီ'); }, function () { toast('ကူးလို့ မရပါ'); });
@@ -1507,21 +1512,11 @@ function fbvouchEval(bet, fxMap, settings) {
 // Per-day display numbers (Player voucherDisplayNos rule, one day's
 // group): 1-based position in (voucher_no, created) order, so NO.1 is
 // the day's first-placed voucher even though the list shows newest first.
+// Single source of truth for the per-day NO. rule (v2.36): the numbering
+// lives in logic.js (L.fbDispNos) and is shared by the fbvouch screen and
+// the fb summary leg lines, so a leg's NO. always matches its voucher card.
 function fbvouchDispNos(bets) {
-  const list = bets || [];
-  const order = list.map(function (b, idx) { return idx; });
-  order.sort(function (a, b) {
-    const na = (list[a] && list[a].voucher_no) || 0;
-    const nb = (list[b] && list[b].voucher_no) || 0;
-    if (na !== nb) return na - nb;
-    const ca = (list[a] && list[a].created) || '';
-    const cb = (list[b] && list[b].created) || '';
-    if (ca !== cb) return ca < cb ? -1 : 1;
-    return a - b;
-  });
-  const out = [];
-  order.forEach(function (idx, i) { out[idx] = i + 1; });
-  return out;
+  return L.fbDispNos(bets);
 }
 // That user's football vouchers for that day, newest first (pure —
 // testable without DOM). Unresolvable dates excluded (L.betOnDate).
@@ -1958,7 +1953,7 @@ function renderSummary() {
   const hedgeLines = [];
   (state.hedges || []).forEach(function (h) {
     const fx = fxByApi[h.fixture];
-    if (!fx || L.yangonDateOf(fx.kickoff) !== ymd) return;
+    if (!fx || L.yangonDateOf(fx.kickoff_utc) !== ymd) return;
     const s = L.settleHedge(h, fxByApi);
     if (!s) return;
     const net = L.hedgeDailyResult(h, fxByApi);
