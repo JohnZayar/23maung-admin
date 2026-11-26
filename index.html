@@ -104,6 +104,12 @@
   .led-fb-table .ln { color: #475569; font-size: 12px; }
   .led-fb-table tr.mrow1 td { background: #f8fafc; }
   .led-fb-table tr.mrow2 td { border-bottom: 2px solid #1e3a5f; }
+  /* Ledger rows are tappable (Admin v2.38, Pho Nov 26 — hedge entry in the
+     ledger): pointer on live rows, muted on passed ones. */
+  .led-fb-table tr[data-lh] { cursor: pointer; }
+  .led-fb-table tr[data-lh-passed] { opacity: .55; }
+  /* Hedge sheet side picker (Admin v2.38 — new 0-bet hedge only). */
+  .hs-side { font: inherit; font-size: 13px; font-weight: bold; color: #1e3a5f; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 2px 4px; }
   .led-fb-table td .amt { font-size: 14px; }
   .bet-row.over .amt, .bet-row.over .what { color: #b91c1c; font-weight: bold; }
   .bet-row.win { background: #dcfce7; }
@@ -245,7 +251,7 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.37</span></div>
+<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.38</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
@@ -561,6 +567,6 @@
 <!-- record date picker calendar popup (Admin v2.3) -->
 <div id="adminCalOverlay" onclick="if(event.target===this)closeAdminCal()"><div class="acal-card" id="adminCalCard"></div></div>
 
-<script type="module" src="admin.js?v=2.37"></script>
+<script type="module" src="admin.js?v=2.38"></script>
 </body>
 </html>
