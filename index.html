@@ -182,6 +182,24 @@
   .fs-line { font-family: monospace; font-size: 13px; padding: 1px 0 1px 10px; }
   .fs-total { font-size: 15px; font-weight: bold; color: #1e3a5f; padding: 8px 0; margin: 4px 0 14px; border-top: 2px solid #1e3a5f; }
   .fs-total.neg { color: #d92b2b; }
+  /* fb vouchers by user (Admin v2.34, Pho Nov 26) — voucher card CSS
+     copied VERBATIM from Player index.html so Admin cards render
+     exactly like Player vouchers. */
+  .vouch { border: 2px solid #000; border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; }
+  .vouch .vhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-weight: bold; }
+  .vouch .vrow { display: flex; justify-content: space-between; padding: 2px 0; font-size: 15px; }
+  .vouch .vrow.vwin { background: #f0fdf4; border-radius: 4px; padding-left: 4px; padding-right: 4px; }
+  .vouch .vno { font-weight: bold; color: #0369a1; font-size: 15px; padding: 4px 0 2px; }
+  .vouch .vper { font-size: 13px; color: #64748b; padding: 0 0 2px; }
+  .vouch .vslip-head { font-size: 13px; color: #64748b; padding: 0 0 2px; }
+  .vouch .vslip-league { font-size: 13px; color: #64748b; padding: 2px 0 0; }
+  /* Slip divider (Pho Nov 19, Player v2.18): a thin line above every leg after
+     the first, so the legs read as separate entries. Ball log rows already
+     have their own borders (.ball-tbl td). */
+  .vouch .vslip-league ~ .vslip-league { border-top: 1px solid #e5e7eb; margin-top: 6px; padding-top: 7px; }
+  .vouch .vtot { display: flex; justify-content: space-between; border-top: 1px dashed #cbd5e1; padding-top: 4px; margin-top: 4px; font-weight: bold; }
+  .ro { color: #d92b2b; font-weight: bold; }
+  .pk { background: #dcfce7; color: #166534; padding: 1px 6px; border-radius: 4px; font-weight: bold; }
   .fbsum-pickers { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
   .fbsum-pickers select { flex: 1; margin-bottom: 0; min-width: 0; }
   .fbsum-pickers .acal-btn { flex: none; }
@@ -227,7 +245,7 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.32</span></div>
+<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.34</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
@@ -417,8 +435,137 @@
     <div id="fbsumList"></div>
   </div>
   <button class="btn-navy" onclick="copyFbSum()">စာရင်းချုပ် ကူးမယ်</button>
+  <button class="btn-navy" onclick="openFbVouch()" style="width:100%;margin-top:8px">ဘောက်ချာကြည့်မယ် ›</button>
   <button class="btn-ghost" onclick="go('scr-bigsmall');setBsTab('body')" style="width:100%;margin-top:8px">‹ လယ်ဂျာ ပြန်သွားမယ်</button>
 </div>
+
+<!-- fb vouchers by user (Admin v2.34, Pho Nov 26 — ONE day + ONE user,
+     all that user's football vouchers in the Player voucher format,
+     so the records can be audited leg by leg) -->
+<div class="screen" id="scr-fbvouch">
+  <div class="card">
+    <div class="fbsum-pickers">
+      <select id="fbvouchUserSel" onchange="setFbvouchUser(this.value)"></select>
+      <button class="acal-btn" onclick="openAdminCal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h2M14 14h2M8 18h2M14 18h2"/></svg><span id="adminDateTextBets"></span></button></div>
+  <div id="betsList">
+  <div class="user-card" id="uc1">
+    <div class="user-head" onclick="toggleUser('uc1')"><span>User001 <span class="arr">›</span></span><span class="tot">17,000 ကျပ်</span></div>
+    <div class="user-body">
+      <div class="glabel">2D</div>
+      <div class="bet-row"><span class="what">45 · 78</span><span class="amt">10,000 ကျပ်</span></div>
+      <div class="glabel">3D</div>
+      <div class="bet-row"><span class="what">357</span><span class="amt">5,000 ကျပ်</span></div>
+      <div class="glabel">1D (ဘောပွဲ)</div>
+      <div class="bet-row"><span class="what">ဂိုးပေါ် — မန်စီးတီး vs ဖူလ်ဟမ် 3+25</span><span class="amt">2,000 ကျပ်</span></div>
+    </div>
+  </div>
+  <div class="user-card" id="uc2">
+    <div class="user-head" onclick="toggleUser('uc2')"><span>User002 <span class="arr">›</span></span><span class="tot">10,000 ကျပ်</span></div>
+    <div class="user-body">
+      <div class="glabel">2D</div>
+      <div class="bet-row"><span class="what">12 (အာ 21)</span><span class="amt">3,000 ကျပ်</span></div>
+      <div class="glabel">3D</div>
+      <div class="bet-row"><span class="what">123 · 321</span><span class="amt">2,000 ကျပ်</span></div>
+      <div class="glabel">1D (ဘောပွဲ)</div>
+      <div class="bet-row"><span class="what">မောင်း 3 ပွဲ — မန်စီးတီး · လာဇီယို · ရိုးမား</span><span class="amt">5,000 ကျပ်</span></div>
+    </div>
+  </div>
+  <div class="user-card" id="uc3">
+    <div class="user-head" onclick="toggleUser('uc3')"><span>User003 <span class="arr">›</span></span><span class="tot">25,000 ကျပ်</span></div>
+    <div class="user-body">
+      <div class="glabel">2D</div>
+      <div class="bet-row"><span class="what">90 · 09 · 99</span><span class="amt">15,000 ကျပ်</span></div>
+      <div class="glabel">1D (ဘောပွဲ)</div>
+      <div class="bet-row"><span class="what">ဘော်ဒီ — ရိုးမား 1-5</span><span class="amt">10,000 ကျပ်</span></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- results -->
+<div class="screen" id="scr-res">
+  <div class="sect">ဘောပွဲ ရလဒ် — API ကနေ auto ရောက်တယ်</div>
+  <div class="card">
+    <div class="muted" style="margin-bottom:6px">ဖြည့်စရာ မလို — ပွဲပြီးရင် API ကနေ ဂိုးရလဒ် အလိုအလျောက် ရောက်လာတယ်</div>
+    <div id="fbResults">
+    <div class="bet-row"><span>ရိုးမား vs ဆာဆူအိုလို</span><b>3 – 0</b></div>
+    <div class="bet-row"><span>လိဒ် vs တော့တင်ဟမ်</span><b>1 – 0</b></div>
+    <div class="bet-row"><span>အာဆင်နယ် vs ဟားလ်</span><b>1 – 0</b></div>
+    <div class="bet-row"><span>ဖူလ်ဟမ် vs နယူးကာဆယ်</span><b>1 – 1</b></div>
+    </div>
+    <div class="muted" style="margin-top:6px" id="fbResNote">07.11.2026 ရလဒ် (နမူနာ) · 21.11.2026 ပွဲတွေ ပြီးရင် ဒီမှာ auto ပေါ်မယ်</div>
+    <!-- Auto settle toggle + manual settle (Admin v2.16, Pho Nov 21 06:59):
+         ONE toggle — ON = VPS settles by itself; OFF = Admin checks here,
+         then taps စာရင်းချုပ် to settle + show the summary. These controls
+         sit OUTSIDE #fbResults on purpose: renderResults() rewrites that
+         div's innerHTML, which would clobber anything inside it. -->
+    <div class="set-row" style="margin-top:10px"><span>Auto settle</span><button class="toggle on" id="autoSettleTgl" onclick="toggleAutoSettle(this)" aria-label="Auto settle on/off"></button></div>
+    <button class="btn-navy" style="margin-top:8px" onclick="settleFootballManual()">စာရင်းချုပ်</button>
+  </div>
+  <div class="sect">2D / 3D ပေါက်ဂဏန်း</div>
+  <div class="card">
+    <div class="res-in"><span style="flex:1">2D မနက်ပိုင်း</span><input type="text" id="win2dAm" placeholder="--" style="width:70px" maxlength="2"><span style="flex:1;text-align:right">ညနေပိုင်း</span><input type="text" id="win2dPm" placeholder="--" style="width:70px" maxlength="2"></div>
+    <div class="res-in"><span style="flex:1">3D ပွဲစဉ်</span><input type="text" id="win3d" placeholder="---" style="width:80px" maxlength="3"></div>
+    <button class="btn-navy" onclick="saveWins()">ပေါက်ဂဏန်း သိမ်းမယ်</button>
+  </div>
+</div>
+
+<!-- ledger -->
+<div class="screen" id="scr-ledger">
+  <div class="acal-row"><button class="acal-btn" onclick="openAdminCal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h2M14 14h2M8 18h2M14 18h2"/></svg><span id="adminDateTextLedger"></span></button></div>
+  <div class="card" style="padding:0;overflow:hidden"><div class="tabs" style="margin:0">
+    <button class="on" data-led="2d" onclick="setLedTab('2d')">2D လယ်ဂျာ</button>
+    <button data-led="3d" onclick="setLedTab('3d')">3D လယ်ဂျာ</button>
+    <button data-led="fb" onclick="setLedTab('fb')">ဘောပွဲ လယ်ဂျာ</button>
+  </div></div>
+  <div class="card" id="ledPane2d">
+    <div class="lim-row">လီမစ် (ဂဏန်း တစ်လုံး) <input type="number" id="limLed2d" value="4000" onchange="onLimitChange('2d')"> ကျပ်</div>
+    <div class="muted" style="margin-bottom:6px">လီမစ်ကျော်ရင် အနီပေါ်မယ် · <span id="ledSub2d">စုစုပေါင်း 28,000 ကျပ်</span></div>
+    <div class="per-row"><button data-per="am" onclick="setAdminPeriod('am')">မနက်</button><button data-per="pm" onclick="setAdminPeriod('pm')">ညနေ</button><button data-per="both" onclick="setAdminPeriod('both')">နှစ်ခုလုံး</button></div>
+    <div id="ledSec2dAm"><div class="sec-head">မနက်ပိုင်း · <span id="ledSub2dAm">စုစုပေါင်း 11,500 ကျပ်</span></div>
+    <div class="led-grid" id="ledGrid2dAm"></div></div>
+    <div id="ledSec2dPm"><div class="sec-head">ညနေပိုင်း · <span id="ledSub2dPm">စုစုပေါင်း 16,500 ကျပ်</span></div>
+    <div class="led-grid" id="ledGrid2dPm"></div></div>
+  </div>
+  <div class="card" id="ledPane3d" style="display:none">
+    <div class="lim-row">လီမစ် (ဂဏန်း တစ်လုံး) <input type="number" id="limLed3d" value="4000" onchange="onLimitChange('3d')"> ကျပ်</div>
+    <div class="muted" style="margin-bottom:6px">လီမစ်ကျော်ရင် အနီပေါ်မယ် · <span id="ledSub3d">စုစုပေါင်း 7,000 ကျပ်</span></div>
+    <div id="ledList3d"></div>
+  </div>
+  <div class="card" id="ledPaneFb" style="display:none">
+    <div class="lim-row">လီမစ် (တစ်ကွက်) <input type="number" id="limLedFb" value="8000" onchange="onLimitChange('fb')"> ကျပ်</div>
+    <div class="muted" style="margin-bottom:6px">လီမစ်ကျော်ရင် အနီပေါ်မယ် · <span id="ledSubFb">စုစုပေါင်း 17,000 ကျပ်</span></div>
+    <div id="ledListFb"></div>
+  </div>
+</div>
+
+<!-- bigsmall -->
+<div class="screen" id="scr-bigsmall">
+  <div class="acal-row"><button class="acal-btn" onclick="openAdminCal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h2M14 14h2M8 18h2M14 18h2"/></svg><span id="adminDateTextBs"></span></button></div>
+  <div class="card" style="padding:0;overflow:hidden"><div class="tabs" style="margin:0">
+    <button class="on" data-bs="2d" onclick="setBsTab('2d')">2D စာရင်း</button>
+    <button data-bs="3d" onclick="setBsTab('3d')">3D စာရင်း</button>
+    <button data-bs="body" onclick="setBsTab('body')">ဘော်ဒီစာရင်း</button>
+    <button data-bs="parlay" onclick="setBsTab('parlay')">မောင်းစာရင်း</button>
+  </div></div>
+  <div class="muted" style="margin-bottom:10px">အကြီးဆုံး (ငွေအများဆုံး) ကနေ အစဉ်လိုက် — ကော်ပီကူးလို့ရတယ်</div>
+  <div class="per-row" id="perRowBs"><button data-per="am" onclick="setAdminPeriod('am')">မနက်</button><button data-per="pm" onclick="setAdminPeriod('pm')">ညနေ</button><button data-per="both" onclick="setAdminPeriod('both')">နှစ်ခုလုံး</button></div>
+  <div class="card" id="bsList"></div>
+  <button class="btn-navy" onclick="copyBs()">📋 ကော်ပီကူးမယ်</button>
+</div>
+
+<!-- fb summary (စာရင်းချုပ်, v1.6) -->
+<div class="screen" id="scr-fbsum">
+  <div class="card">
+    <div class="fbsum-pickers">
+      <select id="fbsumUserSel" onchange="setFbsumUser(this.value)"></select>
+      <button class="acal-btn" onclick="openAdminCal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h2M14 14h2M8 18h2M14 18h2"/></svg><span id="adminDateTextFbvouch"></span></button>
+    </div>
+    <div id="fbvouchList"></div>
+  </div>
+  <button class="btn-ghost" onclick="go('scr-fbsum')" style="width:100%;margin-top:8px">‹ စာရင်းချုပ် ပြန်သွားမယ်</button>
+</div>
+
 
 <!-- summary (Admin v2.11, Pho Nov 20: split by game — 2D week / 3D round /
      1D day — with the shared record date picker) -->
@@ -526,6 +673,6 @@
 <!-- record date picker calendar popup (Admin v2.3) -->
 <div id="adminCalOverlay" onclick="if(event.target===this)closeAdminCal()"><div class="acal-card" id="adminCalCard"></div></div>
 
-<script type="module" src="admin.js?v=2.32"></script>
+<script type="module" src="admin.js?v=2.34"></script>
 </body>
 </html>
