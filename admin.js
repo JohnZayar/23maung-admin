@@ -2070,6 +2070,9 @@ function renderSummary() {
   // shows gross (net), e.g. '+10000 (+9650)'; Total = sum of nets (Pho's
   // example: +9650 and -9850 total -200). Hedges keyed by api_id, filtered
   // to the picked day by their fixture's kickoff Yangon date.
+  // Unsettled day hedges (v2.39, Pho Nov 26 — fixture not finished yet)
+  // are SHOWN as pending ('မပြီးသေး') and kept OUT of the Total; the
+  // 'အကန် မရှိသေးပါ' empty state means truly zero day hedges.
   const fxByApi = {};
   state.fixtures.forEach(function (f) { if (f.api_id) fxByApi[f.api_id] = f; });
   let hedgeTotal = 0;
@@ -2078,14 +2081,22 @@ function renderSummary() {
     const fx = fxByApi[h.fixture];
     if (!fx || L.yangonDateOf(fx.kickoff_utc) !== ymd) return;
     const s = L.settleHedge(h, fxByApi);
-    if (!s) return;
-    const net = L.hedgeDailyResult(h, fxByApi);
-    if (net === null || net === undefined) return;
-    hedgeTotal += net;
-    const g = s.gross;
-    const gs = (g >= 0 ? '+' : '') + fmt(g);
-    const ns = (net >= 0 ? '+' : '') + fmt(net);
-    hedgeLines.push(gs + ' (' + ns + ')');
+    const net = s ? L.hedgeDailyResult(h, fxByApi) : null;
+    if (s && net !== null && net !== undefined) {
+      // Settled: exact current format, counts toward the Total.
+      hedgeTotal += net;
+      const g = s.gross;
+      const gs = (g >= 0 ? '+' : '') + fmt(g);
+      const ns = (net >= 0 ? '+' : '') + fmt(net);
+      hedgeLines.push(gs + ' (' + ns + ')');
+    } else {
+      // Unsettled (fixture not finished yet — Admin v2.39, Pho Nov 26):
+      // SHOW it, do not drop it — but keep it OUT of the Total (no P/L
+      // yet). Same bookie + entry info as the ကြီးငယ် summary, plus
+      // 'မပြီးသေး' so Pho can tell it is pending.
+      const entry = L.entryLineText({ kind: h.kind, odds: h.odds || '', team: h.team || '', side: h.side, amount: h.amount || 0 });
+      hedgeLines.push(((h.bookie || '') + ' ' + entry).trim() + ' · မပြီးသေး');
+    }
   });
   const hedgeNetEl = $('sumHedgeNet');
   if (hedgeNetEl) hedgeNetEl.textContent = fmt(hedgeTotal) + ' ကျပ်';
@@ -2313,7 +2324,7 @@ window.saveHedgeSheet = saveHedgeSheet;
 
 // Named exports for Node tests (browser module load ignores them).
 export { timeFromCloseAt, resText, betStatusText, betStatusClass, legLine, legLineHtml, fbDetailHtml, nextAccountNumber };
-export { renderAll, renderBets, renderLedger2D, renderLedger3D, renderLedgerFb, renderBs, bsText, recomputeFromLive, setBsTab, setLedTab, setSumTab, renderSummary };
+export { renderAll, renderBets, renderLedger2D, renderLedger3D, renderLedgerFb, renderBs, renderFbSum, bsText, recomputeFromLive, setBsTab, setLedTab, setSumTab, renderSummary };
 export { renderUsers, selectUser, resetUserPass, toggleUserStatus, adjustUserBalance };
 export { fbvouchUsers, fbvouchUsersFrom, setFbvouchUser, openFbVouch, openFbVouchFromSummary, fbvouchBack, renderFbVouch, fbvouchCardHtml, fbvouchLegLabel, fbvouchSlipLeg, fbvouchEval, fbvouchDispNos, fbvouchDayBets, fmtTimeYangon, playerCode, playerCodeOf, mirrorOdds };
 export { renderBsBody, openHedgeSheet, openLedgerHedge, openHedgeSheetFor, ledgerFbRows, onLedgerFbTap, updateHedgeRemain }; // test hooks (v2.19, v2.38)
