@@ -248,6 +248,19 @@ export function yangonDateOf(value) {
   if (ko === null) return null;
   try { return YGN_DATE_FMT.format(new Date(ko * 1000)); } catch (e) { return null; }
 }
+// fbDayOf (Admin v2.41, Pho Nov 27 — hedge day-filter fix): the FOOTBALL
+// day (YYYY-MM-DD) of a kickoff — the [12:00 -> next 10:00] Yangon window
+// the Player list and the ledger group matches by. A kickoff at 00:15
+// belongs to the PREVIOUS calendar day's football day, so a hedge on it
+// files with its match and bets, not a day later. = Yangon date of
+// (kickoff - 10 hours): 12:00 -> same day, 09:59 next day -> previous day,
+// 10:00 next day -> next day. Accepts an ISO string or unix seconds
+// (via normalizeKickoff); anything else -> null.
+export function fbDayOf(value) {
+  const ko = normalizeKickoff(value);
+  if (ko === null) return null;
+  try { return YGN_DATE_FMT.format(new Date((ko - 10 * 3600) * 1000)); } catch (e) { return null; }
+}
 // buildCloseAt (v1.9): the close_at value to store for a session whose
 // date is `sessionDate` (ISO string or unix seconds) and whose picked
 // close time is `time` ("HH:MM" from the Settings time input). Returns
@@ -915,10 +928,13 @@ export function userDayFbLines(betsFb, playerId, ymd, nameOf, fixturesById, sett
   });
   return { name: name, ymd: ymd, lines: lines, totalNet: settled === 0 ? null : totalNet, settled: settled, unsettled: unsettled };
 }
-// Hedge day filter (Admin v2.36, Pho Nov 26): keep only the hedges whose
-// match kicked off on the selected Yangon day. A hedge's `fixture` is the
-// API id; resolve it to the fixture row via api_id (or the PB id directly),
-// then compare the kickoff's Yangon date (yangonDateOf) with ymd. A hedge
+// Hedge day filter (Admin v2.36, Pho Nov 26; v2.41 Pho Nov 27 — football
+// day, not calendar day): keep only the hedges whose match belongs to the
+// selected FOOTBALL day. A hedge's `fixture` is the API id; resolve it to
+// the fixture row via api_id (or the PB id directly), then compare the
+// kickoff's football day (fbDayOf) with ymd. A hedge whose fixture kicked
+// off at 00:15 files under the previous day — the same day its match and
+// bets show on — instead of leaking a day late. A hedge
 // whose fixture cannot be resolved is EXCLUDED (fail-closed) — without a
 // day it must never leak onto every day's view. The hedge `date` field
 // (DD-MM-YY) is NOT used: it is a different format from the admin day
@@ -933,7 +949,7 @@ export function filterHedgesByDay(hedges, fixturesById, ymd) {
     if (!h) return false;
     const fx = byApi[String(h.fixture || '')] || (fixturesById || {})[h.fixture || ''];
     if (!fx || !fx.kickoff_utc) return false;
-    return yangonDateOf(fx.kickoff_utc) === ymd;
+    return fbDayOf(fx.kickoff_utc) === ymd;
   });
 }
 // Group hedges by bookie -> [{ bookie, lines: [entryLineText] }].

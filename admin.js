@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.32';
+import * as L from './logic.js?v=2.41';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -2101,7 +2101,7 @@ function renderSummary() {
   const hedgeLines = [];
   (state.hedges || []).forEach(function (h) {
     const fx = fxByApi[h.fixture];
-    if (!fx || L.yangonDateOf(fx.kickoff_utc) !== ymd) return;
+    if (!fx || L.fbDayOf(fx.kickoff_utc) !== ymd) return;
     const s = L.settleHedge(h, fxByApi);
     const net = s ? L.hedgeDailyResult(h, fxByApi) : null;
     if (s && net !== null && net !== undefined) {
