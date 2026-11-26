@@ -1083,9 +1083,51 @@ function renderLedger3D() {
   const sub = $('ledSub3d'); if (sub) sub.textContent = 'စုစုပေါင်း ' + fmt(tot) + ' ကျပ်';
   const t3 = $('ledTot3d'); if (t3) t3.textContent = fmt(tot);
 }
+// Ledger fb rows (Admin v2.38, Pho Nov 26 — hedge entry belongs in the
+// LEDGER, not only the ကြီးငယ်): the ledger table lists the admin day's
+// bet-backed matches (BODY_NET) PLUS the day's SCHEDULED fixtures with no
+// bets yet, as 0-amount rows, so Pho can tap a new match and hedge it
+// BEFORE any player bets. Fixture-only rows carry fixtureOnly:true and
+// never enter the bets paths (BODY_NET, copy text, fb summary all still
+// read bets only). Finished / kicked-off fixtures are never listed.
+var LEDGER_FB_ROWS = [];
+function ledgerFbRows() {
+  var d = ensureAdminDate();
+  var rows = (BODY_NET || []).slice();
+  var have = {};
+  rows.forEach(function (m) { have[m.key] = true; });
+  (state.fixtures || []).forEach(function (fx) {
+    if (!fx || !fx.id || have[fx.id]) return;
+    if (fx.status !== 'scheduled') return;
+    if (L.yangonDateOf(fx.kickoff_utc) !== d) return;
+    if (!L.canHedgeMatch({ kickoff_utc: fx.kickoff_utc })) return;
+    var o = (state.oddsByFixture && state.oddsByFixture[fx.id]) || {};
+    rows.push({
+      key: fx.id, home: fx.home || '', away: fx.away || '',
+      home_mm: fx.home_mm || '', away_mm: fx.away_mm || '',
+      h: 0, a: 0, over: 0, under: 0,
+      bodyOdds: o.hcp || L.lineToMyanmar(o.ah_line) || '',
+      goalOdds: o.over || o.goal_line || L.lineToMyanmar(o.gl_line) || '',
+      kickoff_utc: L.normalizeKickoff(fx.kickoff_utc),
+      fixtureOnly: true
+    });
+  });
+  return L.sortBodyNetByKickoff(rows);
+}
 function renderLedgerFb() {
   var w = $('ledListFb');
   if (!w) return;
+  // Admin v2.38: ONE delegated tap listener on the container (it survives
+  // innerHTML re-renders); rows carry data-lh / data-lh-passed. Inline
+  // handlers would put parentheses in the table HTML, which the v2.20
+  // no-parentheses rule forbids — so the rows carry data attributes only.
+  if (!w._lhBound) {
+    w._lhBound = true;
+    w.addEventListener('click', onLedgerFbTap);
+    w.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onLedgerFbTap(e); }
+    });
+  }
   var lim = limitOf('fb');
   var out = '';
   // Admin v2.17 (Pho Nov 21, paper spec 'ဇယားပုံစံအကြမ်း'): body singles
@@ -1093,15 +1135,20 @@ function renderLedgerFb() {
   // show the whole match situation at a glance (time, teams+line, money
   // on each side, goal over/under). Per match 2 rows: time | home+line |
   // away | goal-over line+money, then home money | away money |
-  // goal-under line+money. Kickoff order comes from BODY_NET
-  // (computeBodyNet sorts earliest-first). The limit red does NOT apply
+  // goal-under line+money. Kickoff order comes from ledgerFbRows
+  // (BODY_NET + the day's scheduled 0-bet fixtures, earliest-first).
+  // The limit red does NOT apply
   // to the table — the limit is per single bet, and the table shows
   // per-side TOTALS — it stays on the parlay rows below, which are
   // still one row per bet.
-  var body = BODY_NET || [];
+  // Admin v2.38 (Pho Nov 26): bet-backed matches + the day's scheduled
+  // 0-bet fixtures; every match's rows open the hedge sheet on tap.
+  LEDGER_FB_ROWS = ledgerFbRows();
+  var body = LEDGER_FB_ROWS;
   if (body.length) {
+    out += '<div class="muted" style="margin-bottom:6px">အကန် ထည့်ရန် / ပြင်ရန် ပွဲကို ဖိပါ</div>';
     out += '<table class="led-fb-table"><tbody>';
-    body.forEach(function (m) {
+    body.forEach(function (m, idx) {
       var r = L.ledgerFbTableRow(m);
       // Admin v2.20 (Pho Nov 21 14:38, CORRECTED 14:48): the ledger table
       // deducts the hedge — the net side shows ONLY the remaining amount,
@@ -1116,8 +1163,12 @@ function renderLedgerFb() {
       var goalOverCell = (r.goalLine ? '<span class="ln">⬆️ ' + esc(r.goalLine) + '</span><br>' : '') + '<b class="amt' + (r.over ? '' : ' zero') + '">' + (gn.side === 'over' ? fmt(L.remainingAfterHedge(r.over, gHedge)) : fmt(r.over)) + '</b>';
       var goalUnderCell = (r.goalLine ? '<span class="ln">⬇️ ' + esc(r.goalLine) + '</span><br>' : '') + '<b class="amt' + (r.under ? '' : ' zero') + '">' + (gn.side === 'under' ? fmt(L.remainingAfterHedge(r.under, gHedge)) : fmt(r.under)) + '</b>';
       var scoreCell = r.score ? '<b class="led-score">' + esc(r.score) + '</b>' : '';
-      out += '<tr class="mrow1"><td class="tm">' + esc(r.time) + '</td><td>' + homeCell + '</td><td>' + scoreCell + '</td><td><b>' + esc(r.awayTeam) + '</b></td><td>' + goalOverCell + '</td></tr>';
-      out += '<tr class="mrow2"><td></td><td><b class="amt' + (r.h ? '' : ' zero') + '">' + (bn.side === 'h' ? fmt(L.remainingAfterHedge(r.h, bHedge)) : fmt(r.h)) + '</b></td><td></td><td><b class="amt' + (r.a ? '' : ' zero') + '">' + (bn.side === 'a' ? fmt(L.remainingAfterHedge(r.a, bHedge)) : fmt(r.a)) + '</b></td><td>' + goalUnderCell + '</td></tr>';
+      // Tap a match's rows -> hedge sheet (v2.38, delegated — see
+      // onLedgerFbTap); a passed match only toasts (v1.7 rule, unchanged).
+      var passed = !L.canHedgeMatch(m);
+      var tapAttr = passed ? ' data-lh-passed="1"' : ' data-lh="' + idx + '"';
+      out += '<tr class="mrow1"' + tapAttr + ' tabindex="0" role="button"><td class="tm">' + esc(r.time) + '</td><td>' + homeCell + '</td><td>' + scoreCell + '</td><td><b>' + esc(r.awayTeam) + '</b></td><td>' + goalOverCell + '</td></tr>';
+      out += '<tr class="mrow2"' + tapAttr + ' tabindex="0" role="button"><td></td><td><b class="amt' + (r.h ? '' : ' zero') + '">' + (bn.side === 'h' ? fmt(L.remainingAfterHedge(r.h, bHedge)) : fmt(r.h)) + '</b></td><td></td><td><b class="amt' + (r.a ? '' : ' zero') + '">' + (bn.side === 'a' ? fmt(L.remainingAfterHedge(r.a, bHedge)) : fmt(r.a)) + '</b></td><td>' + goalUnderCell + '</td></tr>';
     });
     out += '</tbody></table>';
   }
@@ -1647,22 +1698,47 @@ var hedgeCtx = null; // { idx, m, bn, gn, existing }
 function yangonToday() {
   return new Date(Date.now() + 6.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
-function hedgeSheetRow(kind, label, net, draftAmt, draftBookie, lim) {
+function hedgeSheetRow(kind, label, net, draftAmt, draftBookie, lim, opts) {
+  // Admin v2.38: a NEW (fixture-only, 0-bet) hedge has no exposure to
+  // cover — the row shows 'အကန် အသစ်' instead of 'အကျန် 0', no remaining
+  // line, no over-net warning, no all-in button, and a side picker
+  // (opts.sideHtml) so Pho chooses the side he wants to take.
+  var isNew = !!(opts && opts.isNew);
   var rem = L.remainingAfterHedge(net, draftAmt || 0);
   var exc = lim > 0 ? L.excessOverLimit(rem, lim) : 0;
+  var labelHtml = esc(label) + (opts && opts.sideHtml ? ' ' + opts.sideHtml : '') + (isNew ? ' · အကန် အသစ်' : ' · အကျန် <b>' + fmt(net) + '</b><span style="color:#d92b2b" id="hg-exc-' + kind + '">' + (exc > 0 ? ' · အကျွံ <b>' + fmt(exc) + '</b>' : '') + '</span>');
   return '<div class="hs-row" data-kind="' + kind + '">' +
-    '<div class="hs-label">' + esc(label) + ' · အကျန် <b>' + fmt(net) + '</b><span style="color:#d92b2b" id="hg-exc-' + kind + '">' + (exc > 0 ? ' · အကျွံ <b>' + fmt(exc) + '</b>' : '') + '</span></div>' +
+    '<div class="hs-label">' + labelHtml + '</div>' +
     '<div class="hs-inputs">' +
       '<input id="hg-amt-' + kind + '" type="number" min="0" step="500" inputmode="numeric" placeholder="ကန်မည့် ပမာဏ" value="' + (draftAmt || '') + '" oninput="updateHedgeRemain(\'' + kind + '\')">' +
       '<input id="hg-bookie-' + kind + '" type="text" list="bookieList" placeholder="အကန်ဒိုင် နာမည်" value="' + esc(draftBookie || '') + '">' +
-      '<button type="button" onclick="hedgeAllIn(\'' + kind + '\')">အကုန်ကန်</button>' +
+      (isNew ? '' : '<button type="button" onclick="hedgeAllIn(\'' + kind + '\')">အကုန်ကန်</button>') +
     '</div>' +
-    '<div class="hs-rem" id="hg-rem-' + kind + '">ကျန် ' + fmt(rem) + '</div>' +
-    '<div class="hs-warn" id="hg-warn-' + kind + '" style="display:none">အကျန် ထက် များနေတယ် — ကျန် 0 ပဲ ဖြစ်မယ်</div>' +
+    (isNew ? '' : '<div class="hs-rem" id="hg-rem-' + kind + '">ကျန် ' + fmt(rem) + '</div>' +
+    '<div class="hs-warn" id="hg-warn-' + kind + '" style="display:none">အကျန် ထက် များနေတယ် — ကျန် 0 ပဲ ဖြစ်မယ်</div>') +
   '</div>';
 }
 function openHedgeSheet(idx) {
-  var m = BODY_NET[idx];
+  openHedgeSheetFor(BODY_NET[idx], idx);
+}
+// Ledger table entry (Admin v2.38, Pho Nov 26): the ledger's rows live in
+// LEDGER_FB_ROWS (bet-backed + fixture-only), so the tap resolves there.
+function openLedgerHedge(idx) {
+  openHedgeSheetFor(LEDGER_FB_ROWS[idx], idx);
+}
+// Ledger row tap (Admin v2.38, delegated from renderLedgerFb): a tap on a
+// live row opens the hedge sheet for that match; a passed row only toasts.
+function onLedgerFbTap(e) {
+  var t = e && e.target && e.target.closest ? e.target.closest('tr') : null;
+  if (!t || !t.dataset) return;
+  if (t.dataset.lhPassed !== undefined) { toastKickoffPassed(); return; }
+  if (t.dataset.lh !== undefined && t.dataset.lh !== '') openLedgerHedge(parseInt(t.dataset.lh, 10));
+}
+// Hedge sheet core — shared by the ကြီးငယ် card (openHedgeSheet) and the
+// ledger table row (openLedgerHedge). Bet-backed behaviour is unchanged;
+// a fixture-only (0-bet) match opens both rows as a NEW position with
+// side pickers, so Pho can hedge a new match before any player bets.
+function openHedgeSheetFor(m, idx) {
   if (!m) return;
   // v1.7: a passed match cannot be hedged (plain kickoff rule, no 5-min
   // window — that lives in the Player app).
@@ -1670,7 +1746,8 @@ function openHedgeSheet(idx) {
   var bn = L.bodyNetOf(m), gn = L.goalNetOf(m);
   var existing = state.hedgeByMatch[m.key] || { body: null, goal: null };
   var lim = limitOf('fb'); // per-bet limit for the over-limit excess (v2.19)
-  hedgeCtx = { idx: idx, m: m, bn: bn, gn: gn, existing: existing, lim: lim };
+  var isNew = !!m.fixtureOnly;
+  hedgeCtx = { idx: idx, m: m, bn: bn, gn: gn, existing: existing, lim: lim, isNew: isNew };
   $('hedgeSheetTitle').textContent = L.ledgerHeaderText(m);
   // Datalist of bookies already used (grows from Pho's entries).
   var dl = $('bookieList');
@@ -1679,14 +1756,20 @@ function openHedgeSheet(idx) {
   var hasRow = false;
   // A row shows when the net > 0 OR a hedge already exists for that kind
   // (so an existing hedge on a 0 net can still be seen and cleared).
-  if (bn.net > 0 || existing.body) {
-    var bSide = bn.side === 'h' ? L.teamShort(m.home_mm || m.home) : bn.side === 'a' ? L.teamShort(m.away_mm || m.away) : L.teamShort(m.home_mm || m.home);
-    body += hedgeSheetRow('body', 'ဘော်ဒီ — ' + bSide, bn.net, existing.body ? existing.body.amount : '', existing.body ? existing.body.bookie : '', lim);
+  // A fixture-only match always shows both rows (new position, no net).
+  if (isNew || bn.net > 0 || existing.body) {
+    var bHome = L.teamShort(m.home_mm || m.home), bAway = L.teamShort(m.away_mm || m.away);
+    var bSel = existing.body && existing.body.team === bAway ? 'a' : 'h';
+    var bOpts = isNew ? { isNew: true, sideHtml: '<select id="hg-side-body" class="hs-side"><option value="h"' + (bSel === 'h' ? ' selected' : '') + '>' + esc(bHome) + '</option><option value="a"' + (bSel === 'a' ? ' selected' : '') + '>' + esc(bAway) + '</option></select>' } : undefined;
+    var bLabel = isNew ? 'ဘော်ဒီ' : 'ဘော်ဒီ — ' + (bn.side === 'h' ? bHome : bn.side === 'a' ? bAway : bHome);
+    body += hedgeSheetRow('body', bLabel, bn.net, existing.body ? existing.body.amount : '', existing.body ? existing.body.bookie : '', lim, bOpts);
     hasRow = true;
   }
-  if (gn.net > 0 || existing.goal) {
-    var gLabel = gn.side === 'over' ? '⬆️ ဂိုးပေါ်' : gn.side === 'under' ? '⬇️ ဂိုးအောက်' : 'ဂိုးပေါင်း';
-    body += hedgeSheetRow('goal', 'ဂိုးပေါင်း — ' + gLabel, gn.net, existing.goal ? existing.goal.amount : '', existing.goal ? existing.goal.bookie : '', lim);
+  if (isNew || gn.net > 0 || existing.goal) {
+    var gSel = existing.goal && existing.goal.side === 'under' ? 'under' : 'over';
+    var gOpts = isNew ? { isNew: true, sideHtml: '<select id="hg-side-goal" class="hs-side"><option value="over"' + (gSel === 'over' ? ' selected' : '') + '>⬆️ ဂိုးပေါ်</option><option value="under"' + (gSel === 'under' ? ' selected' : '') + '>⬇️ ဂိုးအောက်</option></select>' } : undefined;
+    var gLabel = isNew ? 'ဂိုးပေါင်း' : 'ဂိုးပေါင်း — ' + (gn.side === 'over' ? '⬆️ ဂိုးပေါ်' : gn.side === 'under' ? '⬇️ ဂိုးအောက်' : 'ဂိုးပေါင်း');
+    body += hedgeSheetRow('goal', gLabel, gn.net, existing.goal ? existing.goal.amount : '', existing.goal ? existing.goal.bookie : '', lim, gOpts);
     hasRow = true;
   }
   if (!hasRow) body = '<div class="muted">မျှ — ကန်စရာ မရှိ</div>';
@@ -1721,7 +1804,9 @@ function updateHedgeRemain(kind) {
   if (excEl) excEl.innerHTML = liveExc > 0 ? ' · အကျွံ <b>' + fmt(liveExc) + '</b>' : '';
   var warnEl = $('hg-warn-' + kind);
   if (warnEl) warnEl.style.display = amt > net ? '' : 'none';
-  if (inp) inp.classList.toggle('over', amt > net);
+  // Admin v2.38: a new (fixture-only) hedge has no exposure — any amount
+  // is valid, so never mark it over-net.
+  if (inp) inp.classList.toggle('over', !hedgeCtx.isNew && amt > net);
 }
 async function saveHedgeSheet() {
   if (!hedgeCtx) return;
@@ -1730,13 +1815,18 @@ async function saveHedgeSheet() {
   if (!L.canHedgeMatch(hedgeCtx.m)) { toast('ပွဲချိန် ကျော်သွားပြီ'); return; }
   var m = hedgeCtx.m;
   var fx = fixtureById(m.key);
+  // Admin v2.38: a new (fixture-only) hedge's sides come from the sheet's
+  // pickers, not from a net (there is no exposure yet).
+  var isNew = !!hedgeCtx.isNew;
+  var bSideSel = isNew ? (($('hg-side-body') && $('hg-side-body').value) || 'h') : null;
+  var gSideSel = isNew ? (($('hg-side-goal') && $('hg-side-goal').value) || 'over') : null;
   var drafts = { body: null, goal: null };
   var kinds = ['body', 'goal'];
   for (var i = 0; i < kinds.length; i++) {
     var kind = kinds[i];
     var net = kind === 'body' ? hedgeCtx.bn.net : hedgeCtx.gn.net;
     var ex = kind === 'body' ? hedgeCtx.existing.body : hedgeCtx.existing.goal;
-    if (net <= 0 && !ex) continue; // no row shown for this kind; leave it alone
+    if (net <= 0 && !ex && !isNew) continue; // no row shown for this kind; leave it alone
     var amtInp = $('hg-amt-' + kind);
     var bookieInp = $('hg-bookie-' + kind);
     var amt = amtInp ? Math.max(0, parseInt(amtInp.value, 10) || 0) : 0;
@@ -1744,18 +1834,22 @@ async function saveHedgeSheet() {
     if (amt > 0 && !bookie) { toast('အကန်ဒိုင် နာမည် ထည့်ပါ'); return; }
     if (amt > 0) {
       drafts[kind] = { amount: amt, bookie: bookie };
-      if (kind === 'goal') drafts[kind].side = hedgeCtx.gn.side || '';
+      if (kind === 'goal') drafts[kind].side = isNew ? gSideSel : (hedgeCtx.gn.side || '');
     }
     // amt == 0 leaves drafts[kind] null -> saveHedges deletes the row.
   }
+  // Admin v2.38: a new hedge is dated to the admin day (DD-MM-YY, matching
+  // the stored convention) and its body team comes from the picker.
+  var adminDay = ensureAdminDate();
+  var adminDmy = adminDay ? adminDay.slice(8, 10) + '-' + adminDay.slice(5, 7) + '-' + adminDay.slice(2, 4) : '';
   var matchInfo = {
     fixtureApiId: (fx && fx.api_id) || m.key,
-    date: (fx && fx.date) || yangonToday(),
+    date: isNew ? (adminDmy || yangonToday()) : ((fx && fx.date) || yangonToday()),
     home: m.home || '',
     away: m.away || '',
     bodyOdds: m.bodyOdds || '',
     goalOdds: m.goalOdds || '',
-    bodyTeam: hedgeCtx.bn.side === 'h' ? L.teamShort(m.home_mm || m.home) : hedgeCtx.bn.side === 'a' ? L.teamShort(m.away_mm || m.away) : L.teamShort(m.home_mm || m.home),
+    bodyTeam: isNew ? (bSideSel === 'a' ? L.teamShort(m.away_mm || m.away) : L.teamShort(m.home_mm || m.home)) : (hedgeCtx.bn.side === 'h' ? L.teamShort(m.home_mm || m.home) : hedgeCtx.bn.side === 'a' ? L.teamShort(m.away_mm || m.away) : L.teamShort(m.home_mm || m.home)),
     goalTeam: L.teamShort(m.home_mm || m.home)
   };
   try {
@@ -1764,6 +1858,7 @@ async function saveHedgeSheet() {
     recomputeFromLive();
     renderBsBody();
     renderFbSum();
+    renderLedgerFb(); // v2.38: the ledger row just hedged must show the new remaining
     closeHedgeSheet();
     toast('သိမ်းပြီးပါပြီ');
   } catch (e) {
@@ -2204,6 +2299,7 @@ window.fbvouchBack = fbvouchBack;
 window.renderFbVouch = renderFbVouch;
 window.setFbvouchUser = setFbvouchUser;
 window.openHedgeSheet = openHedgeSheet;
+window.openLedgerHedge = openLedgerHedge;
 window.toastKickoffPassed = toastKickoffPassed;
 window.closeHedgeSheet = closeHedgeSheet;
 window.openAdminCal = openAdminCal;
@@ -2220,7 +2316,7 @@ export { timeFromCloseAt, resText, betStatusText, betStatusClass, legLine, legLi
 export { renderAll, renderBets, renderLedger2D, renderLedger3D, renderLedgerFb, renderBs, bsText, recomputeFromLive, setBsTab, setLedTab, setSumTab, renderSummary };
 export { renderUsers, selectUser, resetUserPass, toggleUserStatus, adjustUserBalance };
 export { fbvouchUsers, fbvouchUsersFrom, setFbvouchUser, openFbVouch, openFbVouchFromSummary, fbvouchBack, renderFbVouch, fbvouchCardHtml, fbvouchLegLabel, fbvouchSlipLeg, fbvouchEval, fbvouchDispNos, fbvouchDayBets, fmtTimeYangon, playerCode, playerCodeOf, mirrorOdds };
-export { renderBsBody, openHedgeSheet, updateHedgeRemain }; // test hooks (v2.19)
+export { renderBsBody, openHedgeSheet, openLedgerHedge, openHedgeSheetFor, ledgerFbRows, onLedgerFbTap, updateHedgeRemain }; // test hooks (v2.19, v2.38)
 export { ensureAdminDate, setAdminDate, syncAdminDateText, openAdminCal, closeAdminCal, renderAdminCal, adminCalMove, adminCalPick, adminCalQuick };
 export { resolveAdminPeriod, setAdminPeriod, syncAdminPeriod };
 // Test hook (Node tests only): replace the live state + aggregates wholesale
