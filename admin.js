@@ -18,6 +18,7 @@ const state = {
   selUser: null,       // Users screen (Admin v2.27): selected player id
   fbsumUser: null,     // fb summary (Admin v2.30): selected player id for the user picker
   fbvouchUser: null,   // fb vouchers by user (Admin v2.34): selected player id for the voucher picker
+  fbvouchFrom: null,   // fb vouchers entry source (Admin v2.37): 'summary' | 'fbsum' — back button target
   sumFbUser: null,     // summary fb tab (Admin v2.32): selected player id for the user picker
   bets2d: [], bets3d: [], betsFb: [],
   fixtures: [],        // m23_fixtures
@@ -1395,8 +1396,14 @@ function copyFbSum() {
 // အနိုင်ရငွေ), so the records can be audited leg by leg. Football only.
 // Marks (✅/❌) come from L.settleLeg — the authoritative settlement —
 // while အနိုင်ရငွေ reads the STORED bet record, exactly as Player does.
-// Entry: "ဘောက်ချာကြည့်မယ် ›" on scr-fbsum (openFbVouch carries over
-// the already-picked fbsum user). No bottom-nav button (nav is full at 6).
+// Entry (Admin v2.37, Pho Nov 26): the voucher screen is entered ONLY from
+// the summary fb tab — the "ဘောက်ချာ" link next to the ဘောပွဲ အမြတ်/အရှုံး
+// heading (openFbVouchFromSummary carries over the already-picked summary
+// user, state.sumFbUser). The old scr-fbsum "ဘောက်ချာကြည့်မယ် ›" button is
+// gone. openFbVouch (fbsum entry) is kept for tests / other callers.
+// The back button returns to the entry source (state.fbvouchFrom):
+// summary -> scr-summary with the fb tab active, fbsum -> scr-fbsum;
+// unknown -> scr-fbsum. No bottom-nav button (nav is full at 6).
 // Users with ANY fb bet (body + parlay) — NOT the body-only fbsumUsers().
 function fbvouchUsersFrom(bets, nameOf) {
   const ids = {};
@@ -1407,6 +1414,7 @@ function fbvouchUsersFrom(bets, nameOf) {
 function fbvouchUsers() { return fbvouchUsersFrom(state.betsFb, playerName); }
 function setFbvouchUser(pid) { state.fbvouchUser = pid; renderFbVouch(); }
 function openFbVouch() {
+  state.fbvouchFrom = 'fbsum';
   const users = fbvouchUsers();
   if (state.fbsumUser && users.some(function (u) { return u.id === state.fbsumUser; })) {
     state.fbvouchUser = state.fbsumUser;
@@ -1414,6 +1422,26 @@ function openFbVouch() {
     state.fbvouchUser = users.length ? users[0].id : null;
   }
   renderFbVouch(); go('scr-fbvouch');
+}
+// Summary entry (Admin v2.37): same screen, same shared admin date — only
+// the user comes from the summary fb tab picker (state.sumFbUser), falling
+// back to the first fb bettor when none is selected / valid.
+function openFbVouchFromSummary() {
+  state.fbvouchFrom = 'summary';
+  const users = fbvouchUsers();
+  if (state.sumFbUser && users.some(function (u) { return u.id === state.sumFbUser; })) {
+    state.fbvouchUser = state.sumFbUser;
+  } else if (!state.fbvouchUser || !users.some(function (u) { return u.id === state.fbvouchUser; })) {
+    state.fbvouchUser = users.length ? users[0].id : null;
+  }
+  renderFbVouch(); go('scr-fbvouch');
+}
+// Back from the voucher screen: return to wherever the user came from.
+// Summary entry -> scr-summary with the fb tab active (state.sumTab is
+// already 'fb', setSumTab re-asserts it); anything else -> scr-fbsum.
+function fbvouchBack() {
+  if (state.fbvouchFrom === 'summary') { go('scr-summary'); setSumTab('fb'); }
+  else go('scr-fbsum');
 }
 // Yangon "h:mm am/pm" for a bet's created time (Player fmtDateTimeYangon
 // time part, verbatim logic): "7:34pm". Space-format datetimes without a
@@ -2171,6 +2199,8 @@ window.setFbsumUser = setFbsumUser;
 window.setSumFbUser = setSumFbUser;
 window.copyFbSum = copyFbSum;
 window.openFbVouch = openFbVouch;
+window.openFbVouchFromSummary = openFbVouchFromSummary;
+window.fbvouchBack = fbvouchBack;
 window.renderFbVouch = renderFbVouch;
 window.setFbvouchUser = setFbvouchUser;
 window.openHedgeSheet = openHedgeSheet;
@@ -2189,7 +2219,7 @@ window.saveHedgeSheet = saveHedgeSheet;
 export { timeFromCloseAt, resText, betStatusText, betStatusClass, legLine, legLineHtml, fbDetailHtml, nextAccountNumber };
 export { renderAll, renderBets, renderLedger2D, renderLedger3D, renderLedgerFb, renderBs, bsText, recomputeFromLive, setBsTab, setLedTab, setSumTab, renderSummary };
 export { renderUsers, selectUser, resetUserPass, toggleUserStatus, adjustUserBalance };
-export { fbvouchUsers, fbvouchUsersFrom, setFbvouchUser, openFbVouch, renderFbVouch, fbvouchCardHtml, fbvouchLegLabel, fbvouchSlipLeg, fbvouchEval, fbvouchDispNos, fbvouchDayBets, fmtTimeYangon, playerCode, playerCodeOf, mirrorOdds };
+export { fbvouchUsers, fbvouchUsersFrom, setFbvouchUser, openFbVouch, openFbVouchFromSummary, fbvouchBack, renderFbVouch, fbvouchCardHtml, fbvouchLegLabel, fbvouchSlipLeg, fbvouchEval, fbvouchDispNos, fbvouchDayBets, fmtTimeYangon, playerCode, playerCodeOf, mirrorOdds };
 export { renderBsBody, openHedgeSheet, updateHedgeRemain }; // test hooks (v2.19)
 export { ensureAdminDate, setAdminDate, syncAdminDateText, openAdminCal, closeAdminCal, renderAdminCal, adminCalMove, adminCalPick, adminCalQuick };
 export { resolveAdminPeriod, setAdminPeriod, syncAdminPeriod };
