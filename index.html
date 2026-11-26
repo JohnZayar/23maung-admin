@@ -245,7 +245,7 @@
     <p class="muted" id="loginErr" style="margin-top:8px;color:#b91c1c"></p>
   </div>
 </div>
-<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.36</span></div>
+<div class="topbar"><h1><img src="logo.png?v=2.2" alt="23မောင်း" style="height:26px;vertical-align:-6px;border-radius:6px;margin-right:6px">23မောင်း Admin</h1><span class="ver">Admin v2.37</span></div>
 
 <!-- home -->
 <div class="screen active" id="scr-home">
@@ -435,7 +435,6 @@
     <div id="fbsumList"></div>
   </div>
   <button class="btn-navy" onclick="copyFbSum()">စာရင်းချုပ် ကူးမယ်</button>
-  <button class="btn-navy" onclick="openFbVouch()" style="width:100%;margin-top:8px">ဘောက်ချာကြည့်မယ် ›</button>
   <button class="btn-ghost" onclick="go('scr-bigsmall');setBsTab('body')" style="width:100%;margin-top:8px">‹ လယ်ဂျာ ပြန်သွားမယ်</button>
 </div>
 
@@ -450,7 +449,7 @@
     </div>
     <div id="fbvouchList"></div>
   </div>
-  <button class="btn-ghost" onclick="go('scr-fbsum')" style="width:100%;margin-top:8px">‹ စာရင်းချုပ် ပြန်သွားမယ်</button>
+  <button class="btn-ghost" onclick="fbvouchBack()" style="width:100%;margin-top:8px">‹ စာရင်းချုပ် ပြန်သွားမယ်</button>
 </div>
 
 
@@ -470,7 +469,7 @@
     <div class="stat" id="sumNetStat"><b id="sumNet">—</b><span>အသားတင်ကျန်ငွေ</span></div>
   </div>
   <div class="card" id="sumFbWrap" style="display:none">
-    <h3>ဘောပွဲ အမြတ်/အရှုံး</h3>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px"><h3 style="margin-bottom:0">ဘောပွဲ အမြတ်/အရှုံး</h3><a href="#" onclick="openFbVouchFromSummary();return false;" style="color:#2563eb;text-decoration:underline;font-size:14px">ဘောက်ချာ</a></div>
     <div class="bet-row"><span>ဘောပွဲ အမြတ်/အရှုံး</span><span class="amt" id="sumFbNet">0 ကျပ်</span></div>
     <div class="fbsum-pickers"><select id="sumFbUserSel" onchange="setSumFbUser(this.value)"></select></div>
     <div id="sumFbDetail" class="muted" style="font-size:12px;line-height:1.7;padding-left:2px"></div>
@@ -562,6 +561,6 @@
 <!-- record date picker calendar popup (Admin v2.3) -->
 <div id="adminCalOverlay" onclick="if(event.target===this)closeAdminCal()"><div class="acal-card" id="adminCalCard"></div></div>
 
-<script type="module" src="admin.js?v=2.36"></script>
+<script type="module" src="admin.js?v=2.37"></script>
 </body>
 </html>
