@@ -1271,11 +1271,15 @@ export function parseMyanmarOdds(s) {
 // == -main). If the result deviates from the main, it is a FULL win /
 // FULL loss — no pyar, whatever the fraction is (.25/.5/.75 alike). The
 // fraction sets only the pyar AMOUNT. Which side wins the pyar is decided
-// by the LINE SIGN: line < 0 -> the pick wins it (halfWin), line > 0 ->
-// the pick loses it (halfLoss) — EXCEPT at main 0 (CORRECTED Pho Nov 22):
-// at a draw the pyar goes to the RECEIVING side, the giving side loses it
-// (Villa =75 draws 0:0 -> Villa loses 75, Sunderland wins 75). At main >= 1
-// the Nov 17 rule stands.
+// by the SIGNED DISPLAY prar when the leg has a stored Myanmar display
+// (CORRECTED Pho Nov 26, NO.3): at main >= 1 the prar is applied to the
+// GIVER — prar > 0 the giver wins it, prar < 0 the giver loses it
+// ("3-35" giver-on-main loses 35; "2-100" giver-on-main loses the full
+// stake). From the pick's side the pick wins iff (giving and prar > 0) or
+// (receiving and prar < 0). Without a display string the old API-line rule
+// is kept (line < 0 -> the pick wins it). At main 0 the Nov 22 rule stands
+// UNCHANGED: at a draw the pyar goes to the RECEIVING side, the giving side
+// loses it (Villa =75 draws 0:0 -> Villa loses 75, Sunderland wins 75).
 // (This replaces the old quarter-split: a 1.75 line winning by 2 is a FULL
 // win, not a pyar loss; a 1.5 line winning by 1 is a pyar win, not a loss.)
 // NOTE: evalLine is for BODY legs only. Goal-total legs use evalGoalLine
@@ -1293,16 +1297,18 @@ export function parseMyanmarOdds(s) {
 // parseMyanmarOdds(leg.hcp); when omitted the old API-line derivation is
 // kept (backward compat for legs stored without a display string).
 export function evalLine(line, margin, mm) {
-  let main, pyar, hasPrar;
+  let main, pyar, hasPrar, signedPrar;
   if (mm && typeof mm.main === 'number' && typeof mm.prar === 'number') {
     main = mm.main;
     pyar = Math.abs(mm.prar);
+    signedPrar = mm.prar;
     hasPrar = pyar > 0;
   } else {
     pyar = pyarFromLine(line);
     const frac = Math.abs(line) % 1;
     main = Math.trunc(Math.abs(line));
     hasPrar = frac > 0;
+    signedPrar = null;
   }
   // The boundary and the win/loss are judged against the MAIN line (with
   // the pick's giving/receiving sign), not the fractional API line — a
@@ -1313,8 +1319,15 @@ export function evalLine(line, margin, mm) {
   if (hasPrar) {
     const pyarMargin = line < 0 ? main : -main;
     if (margin === pyarMargin) {
-      // 0-main (Pho Nov 22): the pyar goes to the RECEIVING side.
-      const win = main === 0 ? line > 0 : line < 0;
+      // 0-main (Pho Nov 22): the pyar goes to the RECEIVING side — unchanged.
+      // Main >= 1 with a stored display (Pho Nov 26, NO.3): the SIGNED
+      // display prar decides — the pick wins iff (giving and prar > 0) or
+      // (receiving and prar < 0). Without a display string the old API-line
+      // rule (line < 0 -> pick wins) is kept.
+      let win;
+      if (main === 0) win = line > 0;
+      else if (signedPrar !== null) win = (line < 0) === (signedPrar > 0);
+      else win = line < 0;
       return { res: win ? 'halfWin' : 'halfLoss', pyar: pyar };
     }
   }
