@@ -4,7 +4,7 @@
 // collections exist / Admin logs in, the mockup's sample data stays on
 // screen and every action falls back to the mockup's local behaviour.
 import * as PB from './pb.js';
-import * as L from './logic.js?v=2.30';
+import * as L from './logic.js?v=2.31';
 
 // ---------------------------------------------------------------- state
 // Sample data = the mockup v2.4 defaults. Replaced by live rows in loadAll().
@@ -17,6 +17,7 @@ const state = {
   players: [],         // m23_players
   selUser: null,       // Users screen (Admin v2.27): selected player id
   fbsumUser: null,     // fb summary (Admin v2.30): selected player id for the user picker
+  fbvouchUser: null,   // fb vouchers by user (Admin v2.34): selected player id for the voucher picker
   sumFbUser: null,     // summary fb tab (Admin v2.32): selected player id for the user picker
   bets2d: [], bets3d: [], betsFb: [],
   fixtures: [],        // m23_fixtures
@@ -399,7 +400,7 @@ function renderAll() {
   renderBets();
   renderLedger2D(); renderLedger3D(); renderLedgerFb();
   renderBs(); renderBlocked(); updPend();
-  renderDashboard(); renderSummary(); renderResults(); renderSettings(); renderHomeSessions(); renderUsers(); renderFbSum();
+  renderDashboard(); renderSummary(); renderResults(); renderSettings(); renderHomeSessions(); renderUsers(); renderFbSum(); renderFbVouch();
   syncLimitInputs();
 }
 
@@ -422,7 +423,7 @@ function ensureAdminDate() {
 }
 function syncAdminDateText() {
   const txt = state.adminDate ? L.fmtDateOnly(state.adminDate) : '';
-  ['adminDateTextLedger', 'adminDateTextBs', 'adminDateTextBets', 'adminDateTextSummary', 'adminDateTextFbsum'].forEach(function (id) {
+  ['adminDateTextLedger', 'adminDateTextBs', 'adminDateTextBets', 'adminDateTextSummary', 'adminDateTextFbsum', 'adminDateTextFbvouch'].forEach(function (id) {
     const el = $(id);
     if (el) el.textContent = txt;
   });
@@ -1379,6 +1380,238 @@ function copyFbSum() {
   }
 }
 
+
+// ---------------------------------------------------------------- fb vouchers by user (ဘောက်ချာများ, Admin v2.34)
+// Pho Nov 26: in Admin he could not calculate a football bet at all —
+// the လောင်းကစား screen shows one grey line per leg with no score, no
+// per-leg stake, no Total. This screen picks ONE day (shared Admin date)
+// + ONE user and shows ALL that user's football vouchers for that day in
+// the EXACT Player voucher format (header, per-leg rows, Total,
+// အနိုင်ရငွေ), so the records can be audited leg by leg. Football only.
+// Marks (✅/❌) come from L.settleLeg — the authoritative settlement —
+// while အနိုင်ရငွေ reads the STORED bet record, exactly as Player does.
+// Entry: "ဘောက်ချာကြည့်မယ် ›" on scr-fbsum (openFbVouch carries over
+// the already-picked fbsum user). No bottom-nav button (nav is full at 6).
+// Users with ANY fb bet (body + parlay) — NOT the body-only fbsumUsers().
+function fbvouchUsersFrom(bets, nameOf) {
+  const ids = {};
+  (bets || []).forEach(function (b) { if (b.player) ids[b.player] = true; });
+  return Object.keys(ids).map(function (pid) { return { id: pid, name: nameOf(pid) }; })
+    .sort(function (a, b) { return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0); });
+}
+function fbvouchUsers() { return fbvouchUsersFrom(state.betsFb, playerName); }
+function setFbvouchUser(pid) { state.fbvouchUser = pid; renderFbVouch(); }
+function openFbVouch() {
+  const users = fbvouchUsers();
+  if (state.fbsumUser && users.some(function (u) { return u.id === state.fbsumUser; })) {
+    state.fbvouchUser = state.fbsumUser;
+  } else if (!state.fbvouchUser || !users.some(function (u) { return u.id === state.fbvouchUser; })) {
+    state.fbvouchUser = users.length ? users[0].id : null;
+  }
+  renderFbVouch(); go('scr-fbvouch');
+}
+// Yangon "h:mm am/pm" for a bet's created time (Player fmtDateTimeYangon
+// time part, verbatim logic): "7:34pm". Space-format datetimes without a
+// zone are treated as UTC (PocketBase stores UTC).
+function fmtTimeYangon(iso) {
+  if (!iso) return '';
+  try {
+    let s = String(iso);
+    if (/^\d{4}-\d{2}-\d{2} /.test(s)) {
+      s = s.replace(' ', 'T');
+      if (!/(Z|[+-]\d{2}:?\d{2})$/.test(s)) s += 'Z';
+    }
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Yangon', hour: 'numeric', minute: '2-digit', hour12: true }).formatToParts(new Date(s));
+    const g = {};
+    parts.forEach(function (p) { g[p.type] = p.value; });
+    if (!g.hour || !g.minute) return '';
+    return g.hour + ':' + g.minute + (g.dayPeriod || '');
+  } catch (e) { return ''; }
+}
+// Player short account code: email prefix (e.g. 23M005), name fallback.
+function playerCodeOf(players, pid) {
+  const p = (players || []).find(function (x) { return x.id === pid; });
+  if (p && p.email && String(p.email).indexOf('@') >= 0) return String(p.email).slice(0, String(p.email).indexOf('@'));
+  if (p) return p.name || p.email || pid;
+  return pid;
+}
+function playerCode(pid) { return playerCodeOf(state.players, pid); }
+// Mirror a Myanmar odds sign (Player mirrorOdds, verbatim): the under
+// pick shows the over's display with the sign flipped ("3+85" -> "3-85").
+function mirrorOdds(o) {
+  const s = String(o || '');
+  if (s.indexOf('+') >= 0) return s.replace('+', '-');
+  if (s.indexOf('-') >= 0) return s.replace('-', '+');
+  return s;
+}
+// One leg's pick label (Player buildFbLabel, verbatim shape, but team
+// names via Admin teamName — fixture home_mm/away_mm first, leg English
+// fallback — never Player's TEAM_MM map). Picked team in green .pk pill,
+// hcp in red .ro next to the giving side (hcp_side, pick-side fallback).
+function fbvouchLegLabel(l) {
+  const hh = esc(teamName(l, 'h')), aa = esc(teamName(l, 'a'));
+  const side = l.hcp_side || null;
+  let hOdds = '', aOdds = '';
+  if (l.kind === 'body') {
+    if (side === 'h') hOdds = ' <span class="ro">' + esc(l.hcp || '') + '</span>';
+    else if (side === 'a') aOdds = ' <span class="ro">' + esc(l.hcp || '') + '</span>';
+    else if (l.pick === 'h') hOdds = ' <span class="ro">' + esc(l.hcp || '') + '</span>';
+    else aOdds = ' <span class="ro">' + esc(l.hcp || '') + '</span>';
+    if (l.pick === 'h') return '<span class="pk">' + hh + '</span>' + hOdds + ' VS ' + aa + aOdds;
+    return hh + hOdds + ' VS ' + '<span class="pk">' + aa + '</span>' + aOdds;
+  }
+  if (l.pick === 'over') return hh + ' VS ' + aa + ' · <span class="pk">ဂိုးပေါ် <span class="ro">' + esc(l.over || '') + '</span></span>';
+  return hh + ' VS ' + aa + ' · <span class="pk">ဂိုးအောက် <span class="ro">' + esc(mirrorOdds(l.over || '')) + '</span></span>';
+}
+// One leg of the slip: league + kickoff from the joined fixture, score +
+// tick from L.settleLeg (Player fbSlipLeg, verbatim shape). fx may be
+// null (fixture not loaded) -> '–', no tick. Score only when finished.
+function fbvouchSlipLeg(l, fxMap) {
+  const fx = (fxMap && l) ? fxMap[l.fixture] : null;
+  const league = (fx && fx.league) || '';
+  const kickoffTime = (fx && (fx.time || L.formatKickoffYangon(fx.kickoff_utc))) || '';
+  let score = '–';
+  if (fx && fx.status === 'finished' && fx.home_goals != null && fx.away_goals != null) {
+    score = fx.home_goals + ':' + fx.away_goals;
+  }
+  let tick = '';
+  const r = fx ? L.settleLeg(l, fx) : null;
+  if (r) {
+    if (r.res === 'win' || r.res === 'halfWin') tick = '✅';
+    else if (r.res === 'loss' || r.res === 'halfLoss') tick = '❌';
+    else if (r.res === 'push') tick = '–';
+  }
+  return { league: league, kickoffTime: kickoffTime, score: score, tick: tick };
+}
+// Whole-voucher decided/won (Player evalVoucherFb, verbatim rules, but
+// legs evaluated by L.settleLeg): decided when every leg is finished.
+// Body: won when any leg wins. Parlay: won only as a whole — parlay
+// payout (bet365 method) beats the stake; when it wins every leg row
+// is highlighted (winIdx = all legs).
+function fbvouchEval(bet, fxMap, settings) {
+  const legs = (bet && bet.legs) || [];
+  if (!legs.length) return { decided: false, won: false, winIdx: [] };
+  const evaled = legs.map(function (lg) { return L.settleLeg(lg, fxMap ? fxMap[lg.fixture] : null); });
+  for (let i = 0; i < evaled.length; i++) if (!evaled[i]) return { decided: false, won: false, winIdx: [] };
+  if (bet.type === 'body') {
+    const idx = [];
+    evaled.forEach(function (r, i) { if (r.res === 'win' || r.res === 'halfWin') idx.push(i); });
+    return { decided: true, won: idx.length > 0, winIdx: idx };
+  }
+  const withRes = legs.map(function (lg, i) { return { res: evaled[i].res, pyar: evaled[i].pyar }; });
+  if (L.parlayPayout(bet.stake || 0, withRes, settings || {}) > (bet.stake || 0)) {
+    return { decided: true, won: true, winIdx: legs.map(function (_, i) { return i; }) };
+  }
+  return { decided: true, won: false, winIdx: [] };
+}
+// Per-day display numbers (Player voucherDisplayNos rule, one day's
+// group): 1-based position in (voucher_no, created) order, so NO.1 is
+// the day's first-placed voucher even though the list shows newest first.
+function fbvouchDispNos(bets) {
+  const list = bets || [];
+  const order = list.map(function (b, idx) { return idx; });
+  order.sort(function (a, b) {
+    const na = (list[a] && list[a].voucher_no) || 0;
+    const nb = (list[b] && list[b].voucher_no) || 0;
+    if (na !== nb) return na - nb;
+    const ca = (list[a] && list[a].created) || '';
+    const cb = (list[b] && list[b].created) || '';
+    if (ca !== cb) return ca < cb ? -1 : 1;
+    return a - b;
+  });
+  const out = [];
+  order.forEach(function (idx, i) { out[idx] = i + 1; });
+  return out;
+}
+// That user's football vouchers for that day, newest first (pure —
+// testable without DOM). Unresolvable dates excluded (L.betOnDate).
+function fbvouchDayBets(bets, sessions, pid, ymd) {
+  return (bets || []).filter(function (b) { return b.player === pid && L.betOnDate(b, sessions, 'fb', ymd); })
+    .sort(function (a, b) { return String(b.created || '').localeCompare(String(a.created || '')); });
+}
+// One football voucher card in the EXACT Player format (renderTotals 1d
+// branch, Player v2.66): NO.N · ဘော်ဒီ|မောင်း header, header line, per-leg
+// rows with league/kickoff sub-line, Total, အနိုင်ရငွေ from the STORED
+// record when decided (Player clamps at 0 — same here).
+function fbvouchCardHtml(b, dispNo, fxMap, settings) {
+  const legs = (b && b.legs) || [];
+  const ev = fbvouchEval(b, fxMap, settings);
+  const vtype = b.type === 'body' ? 'ဘော်ဒီ' : (b.type === 'parlay' ? 'မောင်း' : '');
+  const parts = [];
+  const t = fmtTimeYangon(b.created);
+  if (t) parts.push('အချိန် ' + t);
+  const code = playerCode(b.player);
+  if (code) parts.push('ကုတ် ' + code);
+  const nm = playerName(b.player);
+  if (nm && nm !== code) parts.push(nm);
+  parts.push(legs.length + ' ပွဲ');
+  parts.push('ငွေပေါင်း ' + fmt(b.stake || 0) + ' ကျပ်');
+  let rows = '<div class="vno">NO.' + dispNo + (vtype ? ' · ' + vtype : '') + '</div>';
+  rows += '<div class="vslip-head">' + esc(parts.join(' · ')) + '</div>';
+  const slipSub = function (slip) {
+    if (!slip || (!slip.league && !slip.kickoffTime)) return '';
+    const bits = [];
+    if (slip.league) bits.push(slip.league);
+    if (slip.kickoffTime) bits.push(slip.kickoffTime);
+    return '<div class="vslip-league">' + esc(bits.join(' · ')) + '</div>';
+  };
+  if (b.type === 'body') {
+    rows += legs.map(function (lg, j) {
+      const cls = ev.winIdx.indexOf(j) >= 0 ? 'vrow vwin' : 'vrow';
+      const slip = fbvouchSlipLeg(lg, fxMap);
+      const right = fmt(lg.stake || 0) + ' ကျပ် · ' + slip.score + (slip.tick ? ' ' + slip.tick : '');
+      return slipSub(slip) + '<div class="' + cls + '"><span>' + fbvouchLegLabel(lg) + '</span><span>' + right + '</span></div>';
+    }).join('');
+  } else {
+    rows += legs.map(function (lg, j) {
+      const cls = ev.winIdx.indexOf(j) >= 0 ? 'vrow vwin' : 'vrow';
+      const slip = fbvouchSlipLeg(lg, fxMap);
+      const right = slip.score + (slip.tick ? ' ' + slip.tick : '');
+      return slipSub(slip) + '<div class="' + cls + '"><span>' + fbvouchLegLabel(lg) + '</span><span>' + right + '</span></div>';
+    }).join('');
+    if (b.type === 'parlay') rows += '<div class="' + (ev.won ? 'vrow vwin' : 'vrow') + '" style="font-weight:bold"><span>' + legs.length + 'မောင်း</span><span>' + fmt(b.stake || 0) + '</span></div>';
+  }
+  const mark = !ev.decided ? '' : (ev.won ? ' ✅' : ' ❌');
+  rows += '<div class="vtot"><span>Total</span><span>' + fmt(b.stake || 0) + ' ကျပ်' + mark + '</span></div>';
+  if (ev.decided) {
+    const profit = (b.profit !== null && b.profit !== undefined) ? b.profit : ((b.payout || 0) - (b.stake || 0));
+    rows += '<div class="vrow"><span>အနိုင်ရငွေ</span><b style="color:#166534">' + fmt(Math.max(0, profit)) + ' ကျပ်</b></div>';
+  }
+  return '<div class="vouch">' + rows + '</div>';
+}
+function renderFbVouch() {
+  const w = $('fbvouchList');
+  if (!w) return;
+  // Mockup mode (pre-login): never render the LEDFB mockup bets — the
+  // screen shows the empty message until live data loads.
+  if (!state.loaded) {
+    w.innerHTML = '<div class="muted">ထိုးသား မရှိသေးပါ</div>';
+    return;
+  }
+  const ymd = ensureAdminDate();
+  const users = fbvouchUsers();
+  if (!state.fbvouchUser || !users.some(function (u) { return u.id === state.fbvouchUser; })) {
+    state.fbvouchUser = users.length ? users[0].id : null;
+  }
+  const sel = $('fbvouchUserSel');
+  if (sel) {
+    sel.innerHTML = users.map(function (u) { return '<option value="' + esc(u.id) + '"' + (u.id === state.fbvouchUser ? ' selected' : '') + '>' + esc(u.name) + '</option>'; }).join('');
+    sel.value = state.fbvouchUser || '';
+  }
+  if (!state.fbvouchUser) {
+    w.innerHTML = '<div class="muted">ထိုးသား မရှိသေးပါ</div>';
+    return;
+  }
+  const bets = fbvouchDayBets(state.betsFb, state.sessions, state.fbvouchUser, ymd);
+  if (!bets.length) {
+    w.innerHTML = '<div class="fs-name">' + esc(playerName(state.fbvouchUser)) + '</div><div class="muted">ဘောက်ချာ မရှိပါ</div>';
+    return;
+  }
+  const nos = fbvouchDispNos(bets);
+  const fxMap = fxById();
+  w.innerHTML = bets.map(function (b, i) { return fbvouchCardHtml(b, nos[i], fxMap, state.settings || {}); }).join('');
+}
+
 // ---------------------------------------------------------------- hedge sheet (v1.6)
 // Bottom sheet opened by tapping a ledger card. Draft-only until Save;
 // Cancel / ✕ / backdrop discards. Bookie = TEXT INPUT with a datalist of
@@ -1942,6 +2175,9 @@ window.renderFbSum = renderFbSum;
 window.setFbsumUser = setFbsumUser;
 window.setSumFbUser = setSumFbUser;
 window.copyFbSum = copyFbSum;
+window.openFbVouch = openFbVouch;
+window.renderFbVouch = renderFbVouch;
+window.setFbvouchUser = setFbvouchUser;
 window.openHedgeSheet = openHedgeSheet;
 window.toastKickoffPassed = toastKickoffPassed;
 window.closeHedgeSheet = closeHedgeSheet;
@@ -1958,6 +2194,7 @@ window.saveHedgeSheet = saveHedgeSheet;
 export { timeFromCloseAt, resText, betStatusText, betStatusClass, legLine, legLineHtml, fbDetailHtml, nextAccountNumber };
 export { renderAll, renderBets, renderLedger2D, renderLedger3D, renderLedgerFb, renderBs, bsText, recomputeFromLive, setBsTab, setLedTab, setSumTab, renderSummary };
 export { renderUsers, selectUser, resetUserPass, toggleUserStatus, adjustUserBalance };
+export { fbvouchUsers, fbvouchUsersFrom, setFbvouchUser, openFbVouch, renderFbVouch, fbvouchCardHtml, fbvouchLegLabel, fbvouchSlipLeg, fbvouchEval, fbvouchDispNos, fbvouchDayBets, fmtTimeYangon, playerCode, playerCodeOf, mirrorOdds };
 export { renderBsBody, openHedgeSheet, updateHedgeRemain }; // test hooks (v2.19)
 export { ensureAdminDate, setAdminDate, syncAdminDateText, openAdminCal, closeAdminCal, renderAdminCal, adminCalMove, adminCalPick, adminCalQuick };
 export { resolveAdminPeriod, setAdminPeriod, syncAdminPeriod };
