@@ -1096,11 +1096,21 @@ function ledgerFbRows() {
   var rows = (BODY_NET || []).slice();
   var have = {};
   rows.forEach(function (m) { have[m.key] = true; });
+  // Admin v2.42 (Pho Nov 27, option B): fixture-only rows follow the
+  // FOOTBALL day (fbDayOf), not the kickoff calendar day — a 0-bet match
+  // kicking off at 00:15 belongs to the previous day's ledger, so it can
+  // be hedged before it kicks off. Finished matches in the football day
+  // ALSO list, as VIEW-ONLY rows with their score (tap only toasts — the
+  // kickoff has passed, so renderLedgerFb marks them data-lh-passed and
+  // openHedgeSheetFor refuses them). 'live' matches stay hidden.
   (state.fixtures || []).forEach(function (fx) {
     if (!fx || !fx.id || have[fx.id]) return;
-    if (fx.status !== 'scheduled') return;
-    if (L.yangonDateOf(fx.kickoff_utc) !== d) return;
-    if (!L.canHedgeMatch({ kickoff_utc: fx.kickoff_utc })) return;
+    if (L.fbDayOf(fx.kickoff_utc) !== d) return;
+    var finished = fx.status === 'finished';
+    if (!finished) {
+      if (fx.status !== 'scheduled') return;
+      if (!L.canHedgeMatch({ kickoff_utc: fx.kickoff_utc })) return;
+    }
     var o = (state.oddsByFixture && state.oddsByFixture[fx.id]) || {};
     rows.push({
       key: fx.id, home: fx.home || '', away: fx.away || '',
@@ -1109,6 +1119,7 @@ function ledgerFbRows() {
       bodyOdds: o.hcp || L.lineToMyanmar(o.ah_line) || '',
       goalOdds: o.over || o.goal_line || L.lineToMyanmar(o.gl_line) || '',
       kickoff_utc: L.normalizeKickoff(fx.kickoff_utc),
+      home_goals: fx.home_goals, away_goals: fx.away_goals,
       fixtureOnly: true
     });
   });
