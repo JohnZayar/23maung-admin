@@ -9,7 +9,9 @@
 // Where the schema leaves a rule open it is marked OPEN below and the
 // chosen behaviour is the one the task assigned (see WIRING.md).
 // Parlay payout: bet365 method since Nov 22 (Pho ordered) — gross x 0.84;
-// the Nov-17 fixed table is removed (see the Parlay section).
+// CORRECTED Pho Nov 27: the calculated amount is the PROFIT, not the total
+// return — payout (total the player receives) = profit + stake. The Nov-17
+// fixed table is removed (see the Parlay section).
 
 export function reverse2(n) { return String(n).split('').reverse().join(''); }
 
@@ -1288,15 +1290,23 @@ export function legFactor(res, pyar) {
   return 0; // 'loss' (or unset) — parlayPayout short-circuits on loss anyway
 }
 
-// bet365 parlay method (Pho Nov 22, ORDERED — replaces the Nov-17 table):
-// gross = stake x Π(leg factors); net (TOTAL return, stake included) =
-// gross x (1 - 0.16). The 16% is a FIXED commission on the gross (from
-// Pho's 365maung sheet image) — NOT a Settings knob. Leg factors (unchanged):
-// full win x2; pyar win x(1+pyar/100); pyar loss x(1-pyar/100); push x1;
-// any full loss = 0. The Nov-17 table (PARLAY_ALLWIN / PARLAY_DRAWS /
-// parlayTableMult) is REMOVED — no longer used anywhere. NO.6 under this
-// method: 2500 x 2 x 2 x 2 x 1.05 x 1.75 = 36750 gross -> 30870 net.
-// (Under the old table NO.6 paid 26414; that bet stays paid — do NOT re-settle.)
+// bet365 parlay method (Pho Nov 22, ORDERED — replaces the Nov-17 table;
+// CORRECTED Pho Nov 27): the calculated amount is the PROFIT, not the
+// total return — profit = stake x Π(leg factors) x (1 - 0.16); payout
+// (TOTAL the player receives) = profit + stake. The 16% is a FIXED
+// commission on the gross (from Pho's 365maung sheet image) — NOT a
+// Settings knob. Leg factors (unchanged): full win x2; pyar win
+// x(1+pyar/100); pyar loss x(1-pyar/100); push x1; any full loss = 0
+// (payout 0, profit -stake). The Nov-17 table (PARLAY_ALLWIN /
+// PARLAY_DRAWS / parlayTableMult) is REMOVED — no longer used anywhere.
+// NO.6 under this method: 2500 x 2 x 2 x 2 x 1.05 x 1.75 = 36750 gross ->
+// 30870 profit, 33370 payout. (Under the old table NO.6 paid 26414; that
+// bet stays paid — do NOT re-settle.)
+// ALL-PUSH (Pho Nov 22, kept literal — FLAGGED Nov 27, Pho to decide):
+// an all-push parlay pays 0.84 x stake as the PAYOUT (profit -0.16 x
+// stake), NOT profit + stake (which would pay 1.84 x stake). A push
+// should return the stake (profit 0, payout = stake); do NOT change
+// until Pho decides.
 export const PARLAY_COMM_BET365 = 0.16;
 
 export function parlayPayout(stake, legs, settings) {
@@ -1308,7 +1318,11 @@ export function parlayPayout(stake, legs, settings) {
     if (l.res === 'loss') return 0;
     gross *= legFactor(l.res, l.pyar);
   }
-  return Math.round(gross * (1 - PARLAY_COMM_BET365));
+  const profit = Math.round(gross * (1 - PARLAY_COMM_BET365));
+  // All-push keeps the Nov 22 literal PAYOUT (0.84 x stake) — returning
+  // profit + stake here would pay 1.84 x stake. Flagged Nov 27; Pho to decide.
+  if (ls.every(function (l) { return l.res === 'push'; })) return profit;
+  return profit + stake;
 }
 
 // ---- Football leg settlement ------------------------------------------------
@@ -1533,6 +1547,10 @@ export function settleBodyBet(bet, fixturesById, settings) {
   return { status: status, payout: payout, profit: payout - stake, legs: legs };
 }
 
+// Parlay settlement (Pho Nov 27 correction): parlayPayout returns the
+// TOTAL payout (profit + stake), so profit = payout - stake here recovers
+// the profit. A full loss pays 0 (profit -stake); all-push keeps the Nov 22
+// literal payout (0.84 x stake) — see parlayPayout.
 export function settleParlayBet(bet, fixturesById, settings) {
   const legs = (bet.legs || []).map(function (leg) {
     const fx = fixturesById[leg.fixture];
